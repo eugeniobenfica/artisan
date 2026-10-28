@@ -37,7 +37,7 @@ void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color) {
     p.translate(center.x, center.y);
     p.scale(radius, radius);
     p.setPen(Qt::NoPen);
-    p.setBrush(bmstyle::qcolor(color));
+    p.setBrush(bestyle::qcolor(color));
     p.drawPath(mark);
     p.restore();
 }

@@ -12,7 +12,7 @@ run it in its own window, and **Export** it for Windows, Linux, macOS or Android
   of objects; an object is a transform plus the few things a 2D game needs (a shape,
   a sprite, a light) and its behavior. No hierarchy of managers to learn.
 - **Easy.** The editor looks and works like [bemotion](https://github.com/eugeniobenfica/bemotion)
-  (it shares its look, `libs/bmstyle`): calm, not a cockpit. A new project already
+  (it shares its look, `libs/bestyle`): calm, not a cockpit. A new project already
   plays.
 - **Extremely fast.** One instanced draw call per texture, whatever the number of
   objects; the GPU does the shapes per pixel; the player is one static executable.
@@ -81,7 +81,7 @@ platform). Android export makes a Gradle project: build it with `gradlew assembl
 | `engine/artisan/runtime` | Input, drawing a scene, the game loop |
 | `player` | `artisan-player`: SDL3 window and input around the engine |
 | `editor` | `artisan`: the Qt editor (`app`: files, settings, export; `ui`: screens and panels) |
-| `libs/bmstyle` | bemotion's look (theme, style, icons, controls), shared |
+| `libs/bestyle` | bemotion's look (theme, style, icons, controls), shared |
 | `platforms/android` | The Android Gradle template |
 | `tests` | Engine tests (`ctest`) |
 

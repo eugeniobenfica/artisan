@@ -28,7 +28,7 @@ add_subdirectory(engine)  # artisan_engine: core, nodes, Lua, Vulkan renderer, r
 add_subdirectory(player)  # artisan-player: runs a game (SDL3 + Vulkan)
 
 if(NOT ARTISAN_PLAYER_ONLY)
-    add_subdirectory(libs/bmstyle) # the look, shared with bemotion
+    add_subdirectory(libs/bestyle) # the look, shared with bemotion
     add_subdirectory(editor)       # artisan: the editor (Qt 6 Widgets)
 endif()
 

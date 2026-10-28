@@ -1,11 +1,11 @@
 #pragma once
 
-// Editor pieces on top of bmstyle's controls: the Artisan mark, a color button, the settings
+// Editor pieces on top of bestyle's controls: the Artisan mark, a color button, the settings
 // card, labels with a size, and a software preview of a scene (home screen thumbnails).
 
 #include "artisan/core/Scene.h"
 
-#include "bmstyle/BmStyle.h"
+#include "bestyle/BeStyle.h"
 
 #include <QFrame>
 #include <QLabel>
@@ -16,10 +16,10 @@
 
 namespace artisan::editor::ui {
 
-using namespace bmstyle;
-namespace theme = bmstyle::theme;
+using namespace bestyle;
+namespace theme = bestyle::theme;
 
-// The Artisan mark: a disc with an "A" cut through it, as bmstyle's Icon::Logo.
+// The Artisan mark: a disc with an "A" cut through it, as bestyle's Icon::Logo.
 void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color);
 
 class LogoMark : public QWidget {

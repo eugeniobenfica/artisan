@@ -37,7 +37,7 @@ QIcon appIcon() {
         QPixmap px(size, size);
         px.fill(Qt::transparent);
         QPainter p(&px);
-        ui::drawLogoMark(p, {size * 0.5f, size * 0.5f}, size * 0.48f, bmstyle::rgba(232, 185, 49));
+        ui::drawLogoMark(p, {size * 0.5f, size * 0.5f}, size * 0.48f, bestyle::rgba(232, 185, 49));
         icon.addPixmap(px);
     }
     return icon;
@@ -86,8 +86,8 @@ int main(int argc, char** argv) {
     for (const char* style : {"Regular", "Medium", "SemiBold", "Bold"})
         QFontDatabase::addApplicationFont(platform::toQt(platform::assetsDir() / "fonts" / (std::string("Inter-") + style + ".ttf")));
     loadSettings();
-    bmstyle::install(bmstyle::theme::darkPalette());
-    bmstyle::setLogoPainter(ui::drawLogoMark);
+    bestyle::install(bestyle::theme::darkPalette());
+    bestyle::setLogoPainter(ui::drawLogoMark);
     ui::installWindowChrome();
     applyTheme();
 

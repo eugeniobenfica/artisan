@@ -2,7 +2,7 @@
 
 Artisan is a minimal, fast, cross-platform 2D game engine (C++20): an engine library
 with no Qt (`engine/`), an SDL3 player (`player/`), and a Qt 6 Widgets editor
-(`editor/`) that looks like bemotion (`libs/bmstyle`, shared with it). Read
+(`editor/`) that looks like bemotion (`libs/bestyle`, shared with it). Read
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing code.
 
 ## Rules
@@ -13,7 +13,7 @@ with no Qt (`engine/`), an SDL3 player (`player/`), and a Qt 6 Widgets editor
 - The `.artisan` format, the Lua API and node types change only compatibly: new
   optional fields with defaults, never renames. New script abilities and nodes are
   documented in `docs/SCRIPTING.md` and tested in the same commit.
-- `libs/bmstyle` is a git subtree of the bestyle repository, shared with bemotion:
+- `libs/bestyle` is a git subtree of the bestyle repository, shared with bemotion:
   commit changes there on their own (no other files), then `tools/bestyle.sh push`;
   `tools/bestyle.sh pull` brings in the other apps' changes.
 - Colors in the editor come from theme tokens (`theme::kText`, `kAccent`…) read at

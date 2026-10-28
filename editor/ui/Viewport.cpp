@@ -31,7 +31,7 @@ using namespace ui;
 
 namespace {
 
-Color fromRgba(Rgba c) { return {bmstyle::red(c) / 255.0f, bmstyle::green(c) / 255.0f, bmstyle::blue(c) / 255.0f, bmstyle::alpha(c) / 255.0f}; }
+Color fromRgba(Rgba c) { return {bestyle::red(c) / 255.0f, bestyle::green(c) / 255.0f, bestyle::blue(c) / 255.0f, bestyle::alpha(c) / 255.0f}; }
 
 QuadInstance overlay(Vec2 center, Vec2 size, float rotation, QuadShape shape, Color fill, float outline, Color outlineColor) {
     QuadInstance q{};

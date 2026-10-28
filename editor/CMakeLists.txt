@@ -32,7 +32,7 @@ add_executable(artisan WIN32
     ui/MainWindow.cpp)
 set_target_properties(artisan PROPERTIES AUTOMOC ON MACOSX_BUNDLE ON)
 target_include_directories(artisan PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(artisan PRIVATE artisan_engine bmstyle Qt6::Widgets Qt6::Gui nlohmann_json::nlohmann_json)
+target_link_libraries(artisan PRIVATE artisan_engine bestyle Qt6::Widgets Qt6::Gui nlohmann_json::nlohmann_json)
 target_compile_definitions(artisan PRIVATE ARTISAN_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 # The player goes with the editor: the preview runs it, the export copies it.
 add_dependencies(artisan artisan-player)
