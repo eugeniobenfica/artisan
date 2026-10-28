@@ -142,6 +142,11 @@ enum class Icon {
     Track,          // motion tracking: a target with a path
     Gradient,       // a gradient fill: a square fading across
     Levels,         // automatic audio levels: bars brought to one height
+    Person,         // a character: a head over shoulders
+    Bulb,           // a light: a bulb with its base
+    File,           // a document with a folded corner
+    Code,           // source code: angle brackets
+    Layers,         // a scene or a stack: three sheets
 };
 
 void drawIcon(Draw& d, Icon icon, Pt center, float size, Rgba color);

@@ -145,6 +145,22 @@ Palette midnightPalette() {
     return p;
 }
 
+Palette sunsetPalette() {
+    Palette p;
+    p.name = "Sunset";
+    p.bgDeep = rgba(20, 12, 15);
+    p.bgPanel = rgba(28, 17, 21);
+    p.bgRaised = rgba(40, 25, 30);
+    p.bgHover = rgba(52, 33, 39);
+    p.border = rgba(58, 38, 44);
+    p.text = rgba(242, 230, 232);
+    p.textDim = rgba(178, 152, 158);
+    p.textFaint = rgba(118, 94, 100);
+    p.accent = rgba(255, 122, 92);
+    p.canvas = rgba(34, 21, 26);
+    return p;
+}
+
 bool paletteFromJson(const std::string& text, Palette& out, std::string* error) {
     try {
         const json j = json::parse(text);

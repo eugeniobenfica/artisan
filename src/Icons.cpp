@@ -360,6 +360,44 @@ void drawIcon(Draw& dl, Icon icon, Pt c, float size, Rgba col) {
         dl.line(Pt(c.x - h * 0.95f, c.y - h * 0.05f), Pt(c.x + h * 0.95f, c.y - h * 0.05f), col, th);
         break;
     }
+    case Icon::Person:
+        dl.circle(Pt(c.x, c.y - h * 0.38f), h * 0.32f, col, th);
+        dl.arc(Pt(c.x, c.y + h * 0.85f), h * 0.65f, kPi, kPi * 2.0f, col, th);
+        break;
+    case Icon::Bulb:
+        dl.arc(Pt(c.x, c.y - h * 0.2f), h * 0.52f, kPi * 0.8f, kPi * 2.2f, col, th);
+        dl.line(Pt(c.x - h * 0.3f, c.y + h * 0.22f), Pt(c.x - h * 0.22f, c.y + h * 0.45f), col, th);
+        dl.line(Pt(c.x + h * 0.3f, c.y + h * 0.22f), Pt(c.x + h * 0.22f, c.y + h * 0.45f), col, th);
+        dl.line(Pt(c.x - h * 0.24f, c.y + h * 0.55f), Pt(c.x + h * 0.24f, c.y + h * 0.55f), col, th);
+        dl.line(Pt(c.x - h * 0.14f, c.y + h * 0.78f), Pt(c.x + h * 0.14f, c.y + h * 0.78f), col, th);
+        break;
+    case Icon::File: {
+        const Pt pts[5] = {Pt(c.x - h * 0.6f, c.y - h * 0.8f), Pt(c.x + h * 0.2f, c.y - h * 0.8f), Pt(c.x + h * 0.6f, c.y - h * 0.4f),
+                           Pt(c.x + h * 0.6f, c.y + h * 0.8f), Pt(c.x - h * 0.6f, c.y + h * 0.8f)};
+        dl.polyline(pts, 5, col, true, th);
+        dl.line(Pt(c.x + h * 0.2f, c.y - h * 0.8f), Pt(c.x + h * 0.2f, c.y - h * 0.4f), col, th);
+        dl.line(Pt(c.x + h * 0.2f, c.y - h * 0.4f), Pt(c.x + h * 0.6f, c.y - h * 0.4f), col, th);
+        break;
+    }
+    case Icon::Code: {
+        const Pt left[3] = {Pt(c.x - h * 0.3f, c.y - h * 0.5f), Pt(c.x - h * 0.8f, c.y), Pt(c.x - h * 0.3f, c.y + h * 0.5f)};
+        const Pt right[3] = {Pt(c.x + h * 0.3f, c.y - h * 0.5f), Pt(c.x + h * 0.8f, c.y), Pt(c.x + h * 0.3f, c.y + h * 0.5f)};
+        dl.polyline(left, 3, col, false, th);
+        dl.polyline(right, 3, col, false, th);
+        dl.line(Pt(c.x + h * 0.12f, c.y - h * 0.7f), Pt(c.x - h * 0.12f, c.y + h * 0.7f), col, th);
+        break;
+    }
+    case Icon::Layers:
+        for (int i = 0; i < 3; ++i) {
+            const float y = c.y - h * 0.5f + h * 0.5f * i;
+            const Pt sheet[4] = {Pt(c.x, y - h * 0.32f), Pt(c.x + h * 0.8f, y), Pt(c.x, y + h * 0.32f), Pt(c.x - h * 0.8f, y)};
+            if (i == 0) dl.polyline(sheet, 4, col, true, th);
+            else {
+                dl.line(sheet[3], sheet[2], col, th);
+                dl.line(sheet[2], sheet[1], col, th);
+            }
+        }
+        break;
     case Icon::Meter:
         dl.rectFilled(Pt(c.x - h * 0.6f, c.y - h * 0.2f), Pt(c.x - h * 0.1f, c.y + h * 0.75f), col, 1.0f);
         dl.rectFilled(Pt(c.x + h * 0.1f, c.y - h * 0.7f), Pt(c.x + h * 0.6f, c.y + h * 0.75f), col, 1.0f);

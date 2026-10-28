@@ -9,12 +9,14 @@ add_library(bestyle STATIC
     include/bestyle/Draw.h
     include/bestyle/Icons.h
     include/bestyle/Metrics.h
+    include/bestyle/Pages.h
     include/bestyle/Style.h
     include/bestyle/Theme.h
     include/bestyle/Widgets.h
     src/BeStyle.cpp
     src/Draw.cpp
     src/Icons.cpp
+    src/Pages.cpp
     src/Style.cpp
     src/Theme.cpp
     src/Widgets.cpp)
