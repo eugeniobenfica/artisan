@@ -19,8 +19,9 @@ editor (Qt)  ──runs / exports──▶  artisan-player (SDL3)
 - **`artisan`** (the editor): `app` (platform, settings, project files, export) ←
   `ui` (screens, panels). The viewport draws with the engine's own `Renderer2D`
   inside a `QVulkanWindow`, so the editor shows exactly what the game draws.
-- **`libs/bmstyle`**: bemotion's look (theme tokens, style, icons, controls). Kept
-  identical to bemotion's so both apps look the same and fixes travel both ways.
+- **`libs/bmstyle`**: bemotion's look (theme tokens, style, icons, controls). A git
+  subtree of the bestyle repository, shared with bemotion so both apps look the same;
+  `tools/bestyle.sh` pulls and pushes changes (see its README).
 
 ## The project format
 

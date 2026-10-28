@@ -13,7 +13,9 @@ with no Qt (`engine/`), an SDL3 player (`player/`), and a Qt 6 Widgets editor
 - The `.artisan` format, the Lua API and node types change only compatibly: new
   optional fields with defaults, never renames. New script abilities and nodes are
   documented in `docs/SCRIPTING.md` and tested in the same commit.
-- `libs/bmstyle` stays identical to bemotion's: changes there go to both.
+- `libs/bmstyle` is a git subtree of the bestyle repository, shared with bemotion:
+  commit changes there on their own (no other files), then `tools/bestyle.sh push`;
+  `tools/bestyle.sh pull` brings in the other apps' changes.
 - Colors in the editor come from theme tokens (`theme::kText`, `kAccent`…) read at
   paint time, labels through `setTone` — themes change while the app runs. Interface
   text is English, short, sentence case, through `tr()`.
