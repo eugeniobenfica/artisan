@@ -19,6 +19,11 @@ struct Settings {
     bool snapToGrid = false;
     bool saveBeforePlay = true;
     float uiScale = 1.0f; // the interface font, relative
+    bool customAccent = false; // accent: the theme's own, or `accent`
+    std::string accent = "#E8B931";
+    bool advanced = false;     // Settings shows every option (each color of the theme)
+    std::vector<std::string> closedCategories; // the library's closed categories ("objects:Shapes")
+    std::string dockLayout;    // where the panels are (the docking library's state, base64)
 };
 
 Settings& settings();

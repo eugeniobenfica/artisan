@@ -55,10 +55,18 @@ functions, follows execution wires into statements and data wires into expressio
 
 ## The editor
 
-`EditorContext` is the open project shared by the panels: the selection, `checkpoint()`
-before a change (a snapshot of the scene for undo; changes under the same key close in
-time merge into one step), `changed()` after it. Panels listen to `sceneChanged` and
-`selectionChanged`.
+`EditorContext` is the open project shared by the panels: the scene being edited (scenes
+are tabs in the navigator), the selection (0: the scene itself), `checkpoint()` before a
+change (a snapshot of that scene for undo; changes under the same key close in time merge
+into one step), `changed()` after it, and the navigator's back / forward history. Panels
+listen to `sceneChanged`, `scenesChanged` and `selectionChanged`. Behavior (`graph()`,
+`script()`) is the selected object's, or the scene's when the scene is selected.
+
+The workspace docks its panels with Qt Advanced Docking System, as bemotion does: the
+library (`ui/Library`: ready-made objects, or the nodes in the Nodes view) on the left;
+the Scene / Nodes / Script views in the middle over the Console; the Hierarchy and Files
+(`ui/ProjectPanels`) over the Inspector on the right. Each moves anywhere; the layout is
+saved in the settings. Settings and Help are bestyle `PagedWindow`s.
 
 Export (`app/Exporter`) copies the platform's player and the game's data; `artisan
 --export <platform> <project> <out>` does it without a window.

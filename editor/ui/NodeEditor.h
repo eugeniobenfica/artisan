@@ -4,13 +4,21 @@
 // arrows, the order things happen) and data pins (colored by type), wires between them. Right-
 // click (or drop a wire on empty space) to add a node, drag headers to move, drag from a pin to
 // wire it, Alt+click a pin to cut its wires, click a value to type it, Delete removes a node.
-// The graph being edited is the selected object's; the Lua it compiles to shows beside it.
+// The graph being edited is the selected object's, or the scene's when the scene is selected; the
+// Lua it compiles to shows beside it. Nodes look like the rest of the editor: raised cards, a
+// header tinted with the category's color and its icon.
 
 #include "artisan/nodes/NodeGraph.h"
 #include "artisan/nodes/NodeLibrary.h"
 
+#include "bestyle/Icons.h"
+
 #include <QPointF>
 #include <QWidget>
+
+#include <optional>
+#include <string>
+#include <vector>
 
 class QLineEdit;
 class QPlainTextEdit;
@@ -21,11 +29,18 @@ namespace artisan::editor {
 
 class EditorContext;
 
+// The node categories in the order they are listed, and how they look (canvas and library).
+const std::vector<std::string>& nodeCategories();
+bestyle::Icon nodeCategoryIcon(const std::string& category);
+bestyle::Rgba nodeCategoryColor(const std::string& category);
+
 class NodeCanvas : public QWidget {
     Q_OBJECT
 public:
     explicit NodeCanvas(EditorContext& ctx, QWidget* parent = nullptr);
     void frameAll();
+    // A node of `type`, at `screen` (the middle of the view when none): selected, one undo step.
+    void addNode(const std::string& type, std::optional<QPointF> screen = std::nullopt);
 
 signals:
     void graphEdited();
@@ -39,6 +54,9 @@ protected:
     void wheelEvent(QWheelEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
     bool event(QEvent* e) override; // its keys before the window's shortcuts
+    void dragEnterEvent(QDragEnterEvent* e) override;
+    void dragMoveEvent(QDragMoveEvent* e) override;
+    void dropEvent(QDropEvent* e) override;
 
 private:
     struct PinRef {
@@ -75,6 +93,7 @@ class NodesTab : public QWidget {
     Q_OBJECT
 public:
     explicit NodesTab(EditorContext& ctx, QWidget* parent = nullptr);
+    NodeCanvas* canvas() const { return canvas_; }
 
 private:
     void refresh();

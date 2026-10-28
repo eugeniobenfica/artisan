@@ -1,11 +1,13 @@
 #pragma once
 
-// Editor pieces on top of bestyle's controls: the Artisan mark, a color button, the settings
-// card, labels with a size, and a software preview of a scene (home screen thumbnails).
+// Editor pieces on top of bestyle's controls: the Artisan mark, a color button, labels with a
+// size, and a software preview of a scene (home screen thumbnails). Settings cards and paged
+// windows are bestyle's (bestyle/Pages.h).
 
 #include "artisan/core/Scene.h"
 
 #include "bestyle/BeStyle.h"
+#include "bestyle/Pages.h"
 
 #include <QFrame>
 #include <QLabel>
@@ -19,8 +21,10 @@ namespace artisan::editor::ui {
 using namespace bestyle;
 namespace theme = bestyle::theme;
 
-// The Artisan mark: a disc with an "A" cut through it, as bestyle's Icon::Logo.
+// The Artisan mark: a flat triangle opened into an "A", as bestyle's Icon::Logo. Always in the
+// brand's gold, whatever the theme's accent.
 void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color);
+inline constexpr Rgba kLogoGold = rgba(232, 185, 49);
 
 class LogoMark : public QWidget {
 public:
@@ -28,6 +32,20 @@ public:
 
 protected:
     void paintEvent(QPaintEvent*) override;
+};
+
+// The mark as a button (the menu bar's way back to the projects).
+class LogoButton : public QAbstractButton {
+public:
+    explicit LogoButton(int size, QWidget* parent = nullptr);
+
+protected:
+    void paintEvent(QPaintEvent*) override;
+    void enterEvent(QEnterEvent*) override { update(); }
+    void leaveEvent(QEvent*) override { update(); }
+
+private:
+    int size_;
 };
 
 // A label in a tone, larger (scale) and / or bold.
@@ -54,17 +72,6 @@ protected:
 
 private:
     Color color_;
-};
-
-// A group of settings rows in a raised card (Settings, dialogs).
-class SettingsCard : public QFrame {
-public:
-    SettingsCard();
-    void addRow(const QString& title, const QString& note, QWidget* control);
-    void addContent(QWidget* w);
-
-protected:
-    void paintEvent(QPaintEvent*) override;
 };
 
 // The scene as QPainter draws it (no GPU): shapes, sprites as boxes, lights as soft discs.

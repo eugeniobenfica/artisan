@@ -150,8 +150,11 @@ Entity entityFromJson(const json& j) {
 json sceneJson(const Scene& s) {
     json entities = json::array();
     for (const Entity& e : s.entities) entities.push_back(entityToJson(e));
-    return {{"name", s.name}, {"background", hex(s.background)}, {"ambient", hex(s.ambient)},
-            {"camera", {{"position", vec(s.camera.position)}, {"zoom", s.camera.zoom}}}, {"entities", entities}};
+    json j = {{"name", s.name}, {"background", hex(s.background)}, {"ambient", hex(s.ambient)},
+              {"camera", {{"position", vec(s.camera.position)}, {"zoom", s.camera.zoom}}}, {"entities", entities}};
+    if (!s.script.empty()) j["script"] = s.script;
+    if (s.graph) j["graph"] = graphToJson(*s.graph);
+    return j;
 }
 
 Scene sceneFrom(const json& j) {
@@ -165,6 +168,8 @@ Scene sceneFrom(const json& j) {
     }
     for (const json& e : j.value("entities", json::array()))
         if (e.is_object()) s.entities.push_back(entityFromJson(e));
+    s.script = get(j, "script", std::string());
+    if (auto it = j.find("graph"); it != j.end() && it->is_object()) s.graph = graphFromJson(*it);
     // Ids are unique and not zero: a hand-edited file is repaired, not refused.
     for (size_t i = 0; i < s.entities.size(); ++i) {
         Entity& e = s.entities[i];

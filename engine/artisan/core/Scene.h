@@ -72,6 +72,10 @@ struct Scene {
     Color ambient{0.35f, 0.35f, 0.42f, 1.0f}; // light where no light reaches (lit objects)
     Camera camera;
     std::vector<Entity> entities;
+    // The scene's own behavior (the rules of a level, a score, a spawner): it runs before the
+    // objects', with no object as `self`.
+    std::string script;
+    std::optional<NodeGraph> graph;
 
     Entity* find(EntityId id);
     const Entity* find(EntityId id) const;

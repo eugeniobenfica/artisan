@@ -43,6 +43,15 @@ void projectRoundTrip() {
     const Entity* player = q.scene().findByName("Player");
     CHECK(player && player->shape && player->shape->kind == ShapeKind::Capsule && player->light);
 
+    // A scene's own behavior goes and comes back; a scene without one writes no field for it.
+    Project withRules = p;
+    withRules.scene().script = "scripts/rules.lua";
+    withRules.scene().graph = NodeGraph{};
+    withRules.scene().graph->add("event.start", 0, 0);
+    CHECK(projectToJson(p).find("rules") == std::string::npos);
+    CHECK(projectFromJson(projectToJson(withRules), q, &err));
+    CHECK(q.scene().script == "scripts/rules.lua" && q.scene().graph && q.scene().graph->nodes.size() == 1);
+
     Project bad;
     CHECK(!projectFromJson("{not json", bad, &err));
     CHECK(!projectFromJson(R"({"artisan": 999})", bad, &err));
@@ -160,7 +169,16 @@ void scripts() {
 
 void game() {
     Project p = starterProject("Game", 1280, 720);
-    std::map<std::string, std::string> files = {{kProjectFile, projectToJson(p)}, {"scripts/player.lua", kStarterPlayerScript}};
+    // The scene's behavior: no object as self, the scene's objects through scene.find.
+    p.scene().script = "scripts/rules.lua";
+    p.scene().graph = NodeGraph{};
+    Node& ev = p.scene().graph->add("event.start", 0, 0);
+    Node& say = p.scene().graph->add("action.log", 200, 0);
+    say.values["value"] = "Scene graph";
+    p.scene().graph->connect({ev.id, "then", say.id, "in"});
+    std::map<std::string, std::string> files = {{kProjectFile, projectToJson(p)},
+                                                {"scripts/player.lua", kStarterPlayerScript},
+                                                {"scripts/rules.lua", "function start(self) log('rules', self.x == nil, scene.find('Player').name) end"}};
     Game g;
     std::string logged;
     g.onLog = [&](const std::string& l) { logged += l + "\n"; };
@@ -173,6 +191,8 @@ void game() {
     }, &err));
     g.start();
     CHECK(logged.find("Hello from Player") != std::string::npos);
+    CHECK(logged.find("rules	true	Player") != std::string::npos);
+    CHECK(logged.find("Scene graph") != std::string::npos);
     g.input.set(Key::Right, true);
     for (int i = 0; i < 60; ++i) g.update(1.0f / 60.0f);
     const Entity* player = g.scene.findByName("Player");

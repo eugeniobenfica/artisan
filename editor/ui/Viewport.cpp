@@ -5,10 +5,12 @@
 #include "artisan/gfx/Renderer2D.h"
 #include "artisan/runtime/SceneDraw.h"
 #include "ui/EditorContext.h"
+#include "ui/Library.h"
 #include "ui/Widgets.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QVBoxLayout>
 #include <QtGui/qtguiglobal.h>
@@ -164,7 +166,7 @@ protected:
 private:
     EntityId pick(Vec2 w) const {
         // The topmost object under the point: the highest layer, then the latest in the list.
-        const Scene& s = ctx_.project.scene();
+        const Scene& s = ctx_.scene();
         const Entity* best = nullptr;
         int bestLayer = INT32_MIN;
         for (const Entity& e : s.entities) {
@@ -212,7 +214,7 @@ void SceneRenderer::releaseResources() { r_.shutdown(); }
 void SceneRenderer::startNextFrame() {
     VkCommandBuffer cmd = w_->currentCommandBuffer();
     const QSize size = w_->swapChainImageSize();
-    const Scene& scene = ctx_.project.scene();
+    const Scene& scene = ctx_.scene();
     VkClearValue clear[3]{};
     const Color bg = scene.background;
     clear[0].color = {{bg.r, bg.g, bg.b, 1.0f}};
@@ -320,6 +322,11 @@ Viewport::Viewport(EditorContext& ctx, QVulkanInstance* vulkan, QWidget* parent)
     window_->onViewChanged = [this] { updateZoomLabel(); };
     QWidget* container = QWidget::createWindowContainer(window_, this);
     container->setFocusPolicy(Qt::StrongFocus);
+    // Objects dragged from the library land where they are dropped. The native view is no drop
+    // site of its own: the drag comes to its container.
+    container->setAcceptDrops(true);
+    container->installEventFilter(this);
+    container_ = container;
     col->addWidget(container, 1);
 
     connect(grid, &QAbstractButton::clicked, this, [this, grid] {
@@ -338,6 +345,13 @@ Viewport::Viewport(EditorContext& ctx, QVulkanInstance* vulkan, QWidget* parent)
     connect(&ctx_, &EditorContext::selectionChanged, this, [this] { refresh(); });
     connect(&ctx_, &EditorContext::opened, this, [this] {
         window_->fitted = false;
+        shownScene_ = ctx_.sceneIndex();
+        if (window_->isExposed()) window_->fitGame();
+    });
+    connect(&ctx_, &EditorContext::scenesChanged, this, [this] {
+        if (ctx_.sceneIndex() == shownScene_) return refresh();
+        shownScene_ = ctx_.sceneIndex(); // another scene: its game frame, whole
+        window_->fitted = false;
         if (window_->isExposed()) window_->fitGame();
     });
     connect(&Appearance::get(), &Appearance::changed, this, [this] { refresh(); });
@@ -345,6 +359,28 @@ Viewport::Viewport(EditorContext& ctx, QVulkanInstance* vulkan, QWidget* parent)
 }
 
 #if QT_CONFIG(vulkan)
+bool Viewport::eventFilter(QObject* watched, QEvent* e) {
+    if (watched != container_ || !window_) return QWidget::eventFilter(watched, e);
+    switch (e->type()) {
+    case QEvent::DragEnter:
+    case QEvent::DragMove: {
+        auto* d = static_cast<QDropEvent*>(e);
+        if (!d->mimeData()->hasFormat(kObjectMime)) return false;
+        d->acceptProposedAction();
+        return true;
+    }
+    case QEvent::Drop: {
+        auto* d = static_cast<QDropEvent*>(e);
+        if (!d->mimeData()->hasFormat(kObjectMime)) return false;
+        const Vec2 at = window_->toWorld(d->position());
+        d->acceptProposedAction();
+        addObject(d->mimeData()->data(kObjectMime).toStdString(), ctx_, this, &at);
+        return true;
+    }
+    default: return QWidget::eventFilter(watched, e);
+    }
+}
+
 void Viewport::fit() {
     if (window_) window_->fitGame();
 }
@@ -359,6 +395,7 @@ void Viewport::updateZoomLabel() {
 
 QString Viewport::deviceName() const { return window_ ? QString::fromStdString(window_->deviceName()) : QString(); }
 #else
+bool Viewport::eventFilter(QObject* watched, QEvent* e) { return QWidget::eventFilter(watched, e); }
 void Viewport::fit() {}
 void Viewport::refresh() {}
 void Viewport::updateZoomLabel() {}

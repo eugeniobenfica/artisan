@@ -97,11 +97,13 @@ ScriptTab::ScriptTab(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx
     connect(save, &QShortcut::activated, this, [this] { saveIfChanged(); });
     connect(&ctx_, &EditorContext::selectionChanged, this, [this] {
         saveIfChanged();
+        pinned_ = false;
         load();
     });
     connect(&ctx_, &EditorContext::sceneChanged, this, [this] {
-        const Entity* e = ctx_.selected();
-        const auto want = e && !e->script.empty() ? ctx_.dir / platform::fromUtf8(e->script) : std::filesystem::path();
+        if (pinned_) return;
+        const std::string& script = ctx_.script();
+        const auto want = script.empty() ? std::filesystem::path() : ctx_.dir / platform::fromUtf8(script);
         if (want != file_) {
             saveIfChanged();
             load();
@@ -110,22 +112,27 @@ ScriptTab::ScriptTab(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx
     load();
 }
 
+void ScriptTab::openFile(const std::filesystem::path& file) {
+    saveIfChanged();
+    pinned_ = true; // until something else is selected
+    showFile(file);
+}
+
 void ScriptTab::load() {
-    const Entity* e = ctx_.selected();
-    file_ = e && !e->script.empty() ? ctx_.dir / platform::fromUtf8(e->script) : std::filesystem::path();
+    const std::string& script = ctx_.script();
+    if (!script.empty()) return showFile(ctx_.dir / platform::fromUtf8(script));
+    file_.clear();
     modified_ = false;
-    if (!e) {
-        title_->setText(tr("Script"));
-        empty_->setText(tr("Select an object to see its script."));
-        stack_->setCurrentIndex(0);
-        return;
-    }
-    if (file_.empty()) {
-        title_->setText(tr("Script  ·  %1").arg(QString::fromStdString(e->name)));
-        empty_->setText(tr("\"%1\" has no script: create one in its Behavior section.").arg(QString::fromStdString(e->name)));
-        stack_->setCurrentIndex(0);
-        return;
-    }
+    const QString owner = QString::fromStdString(ctx_.behaviorOwner());
+    title_->setText(tr("Script  ·  %1").arg(owner));
+    empty_->setText(ctx_.selected() ? tr("\"%1\" has no script: create one in its Behavior section, in the Inspector.").arg(owner)
+                                    : tr("The scene \"%1\" has no script: create one in the Inspector, or select an object.").arg(owner));
+    stack_->setCurrentIndex(0);
+}
+
+void ScriptTab::showFile(const std::filesystem::path& file) {
+    file_ = file;
+    modified_ = false;
     const auto code = platform::readFile(file_);
     loading_ = true;
     text_->setPlainText(code ? QString::fromStdString(*code) : QString());

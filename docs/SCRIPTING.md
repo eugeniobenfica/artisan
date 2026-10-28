@@ -30,6 +30,14 @@ end
 | `self:destroy()` | removes the object at the end of the frame |
 | `vars` | a table of the object's own variables (the nodes' variables live there too) |
 
+## The scene's own behavior
+
+A scene can have a script and a node graph too (select the scene at the top of the
+Hierarchy, or click empty space in the viewport): the rules of a level, a score, a
+spawner. They run before the objects' behaviors, with no object as `self` (its fields
+read `nil`): reach objects with `scene.find(name)`. Object nodes (Move By, Get
+Position…) do nothing there.
+
 ## The game
 
 | | |
@@ -70,7 +78,9 @@ at an event.
 | Values | Number, Text |
 | Variables | Set Variable, Get Variable |
 
-In the Nodes tab: right-click or double-click empty space to add a node; drag from a pin
+In the Nodes tab the library on the left lists every node by category: click one to add
+it in the middle of the view, or drag it where it goes. In the canvas: right-click or
+double-click empty space to add a node; drag from a pin
 to wire it (drop on empty space to add a node already wired); Alt+click a pin to cut its
 wires; click a value to type it; Delete removes the selected node; F frames all.
 The ƒ button shows the Lua the graph becomes.

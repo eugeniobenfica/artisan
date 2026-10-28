@@ -18,20 +18,27 @@ Color fromQColor(const QColor& c) {
 }
 
 void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color) {
-    // Unit coordinates (radius 1, y down): an "A" of two legs and a bar, cut out of the disc.
-    QPainterPath a;
-    a.moveTo(-0.44, 0.56);
-    a.lineTo(0.0, -0.56);
-    a.lineTo(0.44, 0.56);
-    a.moveTo(-0.22, 0.16);
-    a.lineTo(0.22, 0.16);
+    // Unit coordinates (radius 1, y down): a thick triangle (the outer one less the inner one,
+    // scaled about the center of its inscribed circle), and a slit that parts the right leg from
+    // the base at the bottom right, so the triangle reads as an "A".
+    const QPointF top(0.0, -0.92), left(-0.98, 0.78), right(0.98, 0.78);
+    const QPointF in(0.0, 0.214); // the inscribed circle's center (radius 0.566)
+    const double k = 0.47;         // the inner triangle's scale: legs 0.3 thick
+    auto inner = [&](QPointF v) { return in + (v - in) * k; };
+    QPainterPath outer;
+    outer.addPolygon(QPolygonF({top, left, right, top}));
+    QPainterPath hole;
+    hole.addPolygon(QPolygonF({inner(top), inner(left), inner(right), inner(top)}));
+    // The slit: from the hole's bottom right corner down along the right leg's inner edge.
+    const QPointF from = inner(right), along = from - inner(top);
+    const QPointF to = from + along / along.y() * (right.y() - from.y() + 0.05);
+    QPainterPath cut;
+    cut.moveTo(from - along * 0.02);
+    cut.lineTo(to);
     QPainterPathStroker stroker;
-    stroker.setWidth(0.2);
+    stroker.setWidth(0.07);
     stroker.setCapStyle(Qt::FlatCap);
-    stroker.setJoinStyle(Qt::MiterJoin);
-    QPainterPath disc;
-    disc.addEllipse(QPointF(0, 0), 1.0, 1.0);
-    const QPainterPath mark = disc.subtracted(stroker.createStroke(a));
+    const QPainterPath mark = outer.subtracted(hole).subtracted(stroker.createStroke(cut));
     p.save();
     p.setRenderHint(QPainter::Antialiasing);
     p.translate(center.x, center.y);
@@ -44,7 +51,19 @@ void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color) {
 
 void LogoMark::paintEvent(QPaintEvent*) {
     QPainter p(this);
-    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.48f, theme::kAccent);
+    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.48f, kLogoGold);
+}
+
+LogoButton::LogoButton(int size, QWidget* parent) : QAbstractButton(parent), size_(size) {
+    setFixedSize(size, size);
+    setCursor(Qt::PointingHandCursor);
+}
+
+void LogoButton::paintEvent(QPaintEvent*) {
+    QPainter p(this);
+    Draw d(p);
+    if (underMouse()) d.rectFilled({0, 0}, {static_cast<float>(width()), static_cast<float>(height())}, theme::kBgHover, theme::current().rounding);
+    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.36f, kLogoGold);
 }
 
 QLabel* label(const QString& text, Tone tone, float scale, bool bold) {
@@ -98,38 +117,6 @@ void ColorButton::mouseReleaseEvent(QMouseEvent* e) {
         update();
         emit picked(color_);
     }
-}
-
-SettingsCard::SettingsCard() {
-    auto* col = new QVBoxLayout(this);
-    col->setContentsMargins(16, 12, 16, 12);
-    col->setSpacing(10);
-}
-
-void SettingsCard::addRow(const QString& title, const QString& note, QWidget* control) {
-    auto* row = new QHBoxLayout;
-    row->setSpacing(16);
-    auto* text = new QVBoxLayout;
-    text->setSpacing(2);
-    text->addWidget(label(title));
-    if (!note.isEmpty()) {
-        QLabel* n = label(note, Tone::TextFaint, 0.92f);
-        n->setWordWrap(true);
-        text->addWidget(n);
-    }
-    row->addLayout(text, 1);
-    if (control) row->addWidget(control, 0, Qt::AlignVCenter);
-    static_cast<QVBoxLayout*>(layout())->addLayout(row);
-}
-
-void SettingsCard::addContent(QWidget* w) { layout()->addWidget(w); }
-
-void SettingsCard::paintEvent(QPaintEvent*) {
-    QPainter p(this);
-    Draw d(p);
-    const float w = static_cast<float>(width()), h = static_cast<float>(height());
-    d.rectFilled({0.5f, 0.5f}, {w - 0.5f, h - 0.5f}, theme::kBgRaised, metrics::kTileRadius);
-    d.rect({0.5f, 0.5f}, {w - 0.5f, h - 0.5f}, theme::kBorder, metrics::kTileRadius, 1.0f);
 }
 
 void paintScenePreview(QPainter& p, const Scene& scene, const QRectF& target, QSizeF design) {

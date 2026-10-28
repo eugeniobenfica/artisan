@@ -1,4 +1,4 @@
-#include "ui/ObjectsPanel.h"
+#include "ui/InspectorPanel.h"
 
 #include "app/Platform.h"
 #include "app/ProjectIO.h"
@@ -26,13 +26,6 @@ using namespace ui;
 
 namespace {
 
-Icon iconOf(const Entity& e) {
-    if (e.sprite) return Icon::Image;
-    if (e.shape) return e.shape->kind == ShapeKind::Circle || e.shape->kind == ShapeKind::Capsule ? Icon::Ellipse : Icon::Rectangle;
-    if (e.light) return Icon::Burst;
-    return Icon::Cube;
-}
-
 QWidget* hbox(std::initializer_list<QWidget*> widgets) {
     auto* w = new QWidget;
     auto* row = new QHBoxLayout(w);
@@ -44,202 +37,28 @@ QWidget* hbox(std::initializer_list<QWidget*> widgets) {
 
 } // namespace
 
-ObjectsPanel::ObjectsPanel(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx_(ctx) {
+InspectorPanel::InspectorPanel(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx_(ctx) {
     auto* col = new QVBoxLayout(this);
     col->setContentsMargins(0, 0, 0, 0);
     col->setSpacing(0);
-
-    auto* split = new QSplitter(Qt::Vertical);
-    split->setChildrenCollapsible(false);
-    col->addWidget(split);
-
-    // --- the objects ------------------------------------------------------------------------
-    auto* top = new QWidget;
-    auto* tcol = new QVBoxLayout(top);
-    tcol->setContentsMargins(metrics::kPanelMargin, metrics::kPanelMargin, metrics::kPanelMargin, 4);
-    tcol->setSpacing(6);
-    auto* head = new QHBoxLayout;
-    head->addWidget(sectionLabel(tr("Objects")));
-    head->addStretch(1);
-    auto* add = new IconButton(Icon::Plus, tr("Add an object"), 26);
-    connect(add, &QAbstractButton::clicked, this, [this, add] {
-        QMenu menu;
-        menu.addAction(menuIcon(Icon::Rectangle, theme::kTextDim), tr("Rectangle"), [this] { addObject("rectangle"); });
-        menu.addAction(menuIcon(Icon::Rectangle, theme::kTextDim), tr("Rounded Rectangle"), [this] { addObject("rounded"); });
-        menu.addAction(menuIcon(Icon::Ellipse, theme::kTextDim), tr("Circle"), [this] { addObject("circle"); });
-        menu.addAction(menuIcon(Icon::Ellipse, theme::kTextDim), tr("Capsule"), [this] { addObject("capsule"); });
-        menu.addSeparator();
-        menu.addAction(menuIcon(Icon::Image, theme::kTextDim), tr("Sprite..."), [this] { addObject("sprite"); });
-        menu.addAction(menuIcon(Icon::Burst, theme::kTextDim), tr("Light"), [this] { addObject("light"); });
-        menu.addAction(menuIcon(Icon::Cube, theme::kTextDim), tr("Empty Object"), [this] { addObject("empty"); });
-        menu.exec(add->mapToGlobal(QPoint(0, add->height())));
-    });
-    head->addWidget(add);
-    tcol->addLayout(head);
-    list_ = new QListWidget;
-    list_->setFrameShape(QFrame::NoFrame);
-    list_->setIconSize(QSize(16, 16));
-    list_->setDragDropMode(QAbstractItemView::InternalMove); // order = drawing order within a layer
-    list_->setContextMenuPolicy(Qt::CustomContextMenu);
-    tcol->addWidget(list_, 1);
-    split->addWidget(top);
-
-    // The selection, not the current item: the list makes its first row current when it gets
-    // the keyboard, which is not the user picking it.
-    connect(list_, &QListWidget::itemSelectionChanged, this, [this] {
-        if (syncing_) return;
-        const auto items = list_->selectedItems();
-        ctx_.select(items.isEmpty() ? 0 : items.front()->data(Qt::UserRole).toUInt());
-    });
-    connect(list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { list_->editItem(item); });
-    connect(list_, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
-        if (syncing_) return;
-        Entity* e = ctx_.scene().find(item->data(Qt::UserRole).toUInt());
-        const std::string name = item->text().trimmed().toStdString();
-        if (!e || name.empty() || name == e->name) return;
-        ctx_.checkpoint();
-        e->name = name;
-        ctx_.changed();
-    });
-    connect(list_->model(), &QAbstractItemModel::rowsMoved, this, [this] {
-        if (syncing_) return;
-        // The list's order becomes the scene's.
-        ctx_.checkpoint();
-        std::vector<Entity> sorted;
-        for (int i = 0; i < list_->count(); ++i)
-            if (const Entity* e = ctx_.scene().find(list_->item(i)->data(Qt::UserRole).toUInt())) sorted.push_back(*e);
-        if (sorted.size() == ctx_.scene().entities.size()) ctx_.scene().entities = std::move(sorted);
-        ctx_.changed();
-    });
-    connect(list_, &QWidget::customContextMenuRequested, this, [this](QPoint at) {
-        if (!list_->itemAt(at)) return;
-        QMenu menu;
-        menu.addAction(menuIcon(Icon::Duplicate, theme::kTextDim), tr("Duplicate"), [this] { duplicateSelected(); });
-        menu.addAction(menuIcon(Icon::Edit, theme::kTextDim), tr("Rename"), [this] {
-            if (list_->currentItem()) list_->editItem(list_->currentItem());
-        });
-        menu.addSeparator();
-        menu.addAction(menuIcon(Icon::Trash, theme::kDanger), tr("Delete"), [this] { deleteSelected(); });
-        menu.exec(list_->viewport()->mapToGlobal(at));
-    });
-
-    // --- the inspector ----------------------------------------------------------------------
     inspector_ = new QScrollArea;
     inspector_->setWidgetResizable(true);
     inspector_->setFrameShape(QFrame::NoFrame);
     inspector_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    split->addWidget(inspector_);
-    split->setStretchFactor(0, 2);
-    split->setStretchFactor(1, 3);
+    col->addWidget(inspector_);
 
-    connect(&ctx_, &EditorContext::sceneChanged, this, [this] {
-        rebuildList();
-        refreshValues();
-    });
-    connect(&ctx_, &EditorContext::selectionChanged, this, [this] {
-        syncListSelection();
-        rebuildInspector();
-    });
-    connect(&ctx_, &EditorContext::opened, this, [this] {
-        listSignature_.clear();
-        rebuildList();
-        rebuildInspector();
-    });
+    connect(&ctx_, &EditorContext::sceneChanged, this, [this] { refreshValues(); });
+    connect(&ctx_, &EditorContext::selectionChanged, this, [this] { rebuildInspector(); });
+    // Later: a scene renamed from this panel's own field is not deleted while it tells.
+    connect(&ctx_, &EditorContext::scenesChanged, this, [this] { rebuildInspector(); }, Qt::QueuedConnection);
+    connect(&ctx_, &EditorContext::opened, this, [this] { rebuildInspector(); });
 }
 
-void ObjectsPanel::rebuildList() {
-    std::string sig;
-    for (const Entity& e : ctx_.scene().entities) sig += std::to_string(e.id) + ":" + e.name + (e.visible ? "" : "~") + std::to_string(static_cast<int>(iconOf(e))) + "|";
-    if (sig == listSignature_) return;
-    listSignature_ = sig;
-    syncing_ = true;
-    list_->clear();
-    for (const Entity& e : ctx_.scene().entities) {
-        auto* item = new QListWidgetItem(menuIcon(iconOf(e), e.visible ? theme::kTextDim : theme::kTextFaint), QString::fromStdString(e.name));
-        item->setData(Qt::UserRole, e.id);
-        item->setFlags(item->flags() | Qt::ItemIsEditable | Qt::ItemIsDragEnabled);
-        if (!e.visible) item->setForeground(theme::q(theme::kTextFaint));
-        list_->addItem(item);
-    }
-    syncing_ = false;
-    syncListSelection();
-}
-
-void ObjectsPanel::syncListSelection() {
-    syncing_ = true;
-    list_->clearSelection();
-    for (int i = 0; i < list_->count(); ++i)
-        if (list_->item(i)->data(Qt::UserRole).toUInt() == ctx_.selection()) {
-            list_->setCurrentItem(list_->item(i), QItemSelectionModel::ClearAndSelect);
-            list_->scrollToItem(list_->item(i));
-        }
-    syncing_ = false;
-}
-
-void ObjectsPanel::addObject(const std::string& kind) {
-    Entity e;
-    // A new object goes where the game's camera looks.
-    e.position = ctx_.scene().camera.position;
-    if (kind == "sprite") {
-        const QString file = QFileDialog::getOpenFileName(this, tr("Choose an Image"), platform::toQt(ctx_.dir / "assets"),
-                                                          tr("Images (*.png *.jpg *.jpeg *.bmp *.tga)"));
-        if (file.isEmpty()) return;
-        // Images live in the project's assets/, so the game finds them wherever it goes.
-        const auto src = platform::fromQt(file);
-        std::error_code ec;
-        auto rel = std::filesystem::relative(src, ctx_.dir, ec);
-        if (ec || rel.empty() || platform::utf8(rel).starts_with("..")) {
-            rel = std::filesystem::path("assets") / src.filename();
-            std::filesystem::create_directories(ctx_.dir / "assets", ec);
-            std::filesystem::copy_file(src, ctx_.dir / rel, std::filesystem::copy_options::overwrite_existing, ec);
-        }
-        Sprite s;
-        s.image = platform::utf8(rel);
-        if (const QSize size = QImageReader(file).size(); size.isValid()) s.size = {static_cast<float>(size.width()), static_cast<float>(size.height())};
-        e.sprite = s;
-        e.name = platform::utf8(src.stem());
-    } else if (kind == "light") {
-        e.light = Light{};
-        e.name = "Light";
-    } else if (kind == "empty") {
-        e.name = "Object";
-    } else {
-        Shape s;
-        if (kind == "rounded") s.kind = ShapeKind::RoundedRectangle, e.name = "Rounded Rectangle";
-        else if (kind == "circle") s.kind = ShapeKind::Circle, e.name = "Circle";
-        else if (kind == "capsule") s.kind = ShapeKind::Capsule, s.size = {96, 48}, e.name = "Capsule";
-        else e.name = "Rectangle";
-        e.shape = s;
-    }
-    ctx_.checkpoint();
-    const EntityId id = ctx_.scene().add(std::move(e)).id;
-    ctx_.changed();
-    ctx_.select(id);
-}
-
-void ObjectsPanel::deleteSelected() {
-    if (!ctx_.selected()) return;
-    ctx_.checkpoint();
-    ctx_.scene().remove(ctx_.selection());
-    ctx_.changed();
-}
-
-void ObjectsPanel::duplicateSelected() {
-    const Entity* e = ctx_.selected();
-    if (!e) return;
-    Entity copy = *e;
-    copy.position += Vec2(24, 24);
-    ctx_.checkpoint();
-    const EntityId id = ctx_.scene().add(std::move(copy)).id;
-    ctx_.changed();
-    ctx_.select(id);
-}
-
-void ObjectsPanel::refreshValues() {
+void InspectorPanel::refreshValues() {
     for (auto& f : refreshers_) f();
 }
 
-QWidget* ObjectsPanel::section(QVBoxLayout* col, const QString& title, std::function<void()> remove) {
+QWidget* InspectorPanel::section(QVBoxLayout* col, const QString& title, std::function<void()> remove) {
     auto* head = new QWidget;
     auto* row = new QHBoxLayout(head);
     row->setContentsMargins(0, metrics::kGroupGap, 0, 0);
@@ -254,7 +73,7 @@ QWidget* ObjectsPanel::section(QVBoxLayout* col, const QString& title, std::func
     return head;
 }
 
-void ObjectsPanel::rebuildInspector() {
+void InspectorPanel::rebuildInspector() {
     refreshers_.clear();
     auto* body = new QWidget;
     auto* col = new QVBoxLayout(body);
@@ -266,7 +85,7 @@ void ObjectsPanel::rebuildInspector() {
     inspector_->setWidget(body);
 }
 
-void ObjectsPanel::buildEntityInspector(QVBoxLayout* col, Entity& entity) {
+void InspectorPanel::buildEntityInspector(QVBoxLayout* col, Entity& entity) {
     const EntityId id = entity.id;
     auto ent = [this, id] { return ctx_.scene().find(id); };
     // A field bound to a float of the entity: scrubbing is one undo step.
@@ -446,51 +265,7 @@ void ObjectsPanel::buildEntityInspector(QVBoxLayout* col, Entity& entity) {
         col->addWidget(new LabeledRow(tr("Intensity"), number("intensity", [](Entity& e) { return e.light ? &e.light->intensity : nullptr; }, "%.2f", 0.01f, 0, 50), 120));
     }
 
-    // --- behavior --------------------------------------------------------------------------
-    section(col, tr("Behavior"));
-    {
-        auto* script = new QPushButton(entity.script.empty() ? tr("Create Lua Script") : QString::fromStdString(entity.script));
-        script->setIcon(makeIcon(Icon::Edit, theme::kTextDim, 20));
-        script->setToolTip(tr("A Lua script: start(self) and update(self, dt)"));
-        connect(script, &QPushButton::clicked, this, [this, ent] {
-            Entity* e = ent();
-            if (!e) return;
-            if (e->script.empty()) {
-                std::error_code ec;
-                std::string base = "scripts/" + safeFileName(e->name);
-                std::string path = base + ".lua";
-                for (int i = 2; std::filesystem::exists(ctx_.dir / platform::fromUtf8(path), ec); ++i) path = base + " " + std::to_string(i) + ".lua";
-                std::string error;
-                if (!platform::writeFile(ctx_.dir / platform::fromUtf8(path), newScriptTemplate(e->name), &error)) {
-                    QMessageBox::warning(this, tr("Script"), QString::fromStdString(error));
-                    return;
-                }
-                ctx_.checkpoint();
-                e->script = path;
-                ctx_.changed();
-                ctx_.save();
-            }
-            emit ctx_.editScriptRequested();
-        });
-        col->addWidget(new LabeledRow(tr("Script"), script, 120));
-        auto* graph = new QPushButton(entity.graph ? tr("Edit Nodes (%1)").arg(entity.graph->nodes.size()) : tr("Create Node Graph"));
-        graph->setIcon(makeIcon(Icon::Graph, theme::kTextDim, 20));
-        graph->setToolTip(tr("Visual scripting: events, actions and values joined by wires"));
-        connect(graph, &QPushButton::clicked, this, [this, ent] {
-            Entity* e = ent();
-            if (!e) return;
-            if (!e->graph) {
-                ctx_.checkpoint();
-                NodeGraph g;
-                g.add("event.start", 40, 40);
-                g.add("event.update", 40, 200);
-                e->graph = g;
-                ctx_.changed();
-            }
-            emit ctx_.editGraphRequested();
-        });
-        col->addWidget(new LabeledRow(tr("Nodes"), graph, 120));
-    }
+    buildBehavior(col);
 
     // --- more components -------------------------------------------------------------------------
     if (!entity.shape || !entity.sprite || !entity.light) {
@@ -518,12 +293,76 @@ void ObjectsPanel::buildEntityInspector(QVBoxLayout* col, Entity& entity) {
     }
 }
 
-void ObjectsPanel::buildSceneInspector(QVBoxLayout* col) {
+// The behavior of the selected object, or of the scene when none is: its script and its nodes.
+void InspectorPanel::buildBehavior(QVBoxLayout* col) {
+    section(col, tr("Behavior"));
+    const std::string& current = ctx_.script();
+    auto* script = new QPushButton(current.empty() ? tr("Create Lua Script") : QString::fromStdString(current));
+    script->setIcon(makeIcon(Icon::Code, theme::kTextDim, 20));
+    script->setToolTip(tr("A Lua script: start(self) and update(self, dt)"));
+    connect(script, &QPushButton::clicked, this, [this] {
+        if (ctx_.script().empty()) {
+            const std::string owner = ctx_.behaviorOwner();
+            std::error_code ec;
+            std::string base = "scripts/" + safeFileName(owner);
+            std::string path = base + ".lua";
+            for (int i = 2; std::filesystem::exists(ctx_.dir / platform::fromUtf8(path), ec); ++i) path = base + " " + std::to_string(i) + ".lua";
+            std::string error;
+            if (!platform::writeFile(ctx_.dir / platform::fromUtf8(path), newScriptTemplate(owner), &error)) {
+                QMessageBox::warning(this, tr("Script"), QString::fromStdString(error));
+                return;
+            }
+            ctx_.checkpoint();
+            ctx_.script() = path;
+            ctx_.changed();
+            ctx_.save();
+        }
+        emit ctx_.editScriptRequested();
+    });
+    col->addWidget(new LabeledRow(tr("Script"), script, 120));
+    const std::optional<NodeGraph>& g = ctx_.graph();
+    auto* graph = new QPushButton(g ? tr("Edit Nodes (%1)").arg(g->nodes.size()) : tr("Create Node Graph"));
+    graph->setIcon(makeIcon(Icon::Graph, theme::kTextDim, 20));
+    graph->setToolTip(tr("Visual scripting: events, actions and values joined by wires"));
+    connect(graph, &QPushButton::clicked, this, [this] {
+        if (!ctx_.graph()) {
+            ctx_.checkpoint();
+            NodeGraph fresh;
+            fresh.add("event.start", 40, 40);
+            fresh.add("event.update", 40, 200);
+            ctx_.graph() = fresh;
+            ctx_.changed();
+        }
+        emit ctx_.editGraphRequested();
+    });
+    col->addWidget(new LabeledRow(tr("Nodes"), graph, 120));
+}
+
+void InspectorPanel::buildSceneInspector(QVBoxLayout* col) {
     col->addSpacing(metrics::kPanelMargin);
-    col->addWidget(label(tr("Scene"), Tone::Text, 1.1f, true));
-    QLabel* hint = label(tr("Nothing selected: the scene's own settings."), Tone::TextFaint, 0.92f);
+    auto* name = new QLineEdit(QString::fromStdString(ctx_.scene().name));
+    connect(name, &QLineEdit::editingFinished, this, [this, name] {
+        const std::string n = name->text().trimmed().toStdString();
+        if (n.empty() || n == ctx_.scene().name) return;
+        ctx_.checkpoint();
+        ctx_.scene().name = n;
+        ctx_.changed();
+        emit ctx_.scenesChanged();
+    });
+    col->addWidget(name);
+    QLabel* hint = label(tr("The scene: its look, its camera and its own behavior. Select an object for its settings."), Tone::TextFaint, 0.92f);
     hint->setWordWrap(true);
     col->addWidget(hint);
+    {
+        auto* start = new Switch;
+        start->setChecked(ctx_.sceneIndex() == ctx_.project.mainScene);
+        start->setEnabled(!start->isChecked()); // another scene takes it from this one
+        start->setToolTip(tr("The scene the game opens with"));
+        connect(start, &QAbstractButton::toggled, this, [this](bool on) {
+            if (on) ctx_.setStartScene(ctx_.sceneIndex());
+        });
+        col->addWidget(new LabeledRow(tr("Start scene"), start, 120));
+    }
 
     auto colorRow = [&](const QString& name, Color Scene::*field) {
         auto* b = new ColorButton;
@@ -591,6 +430,8 @@ void ObjectsPanel::buildSceneInspector(QVBoxLayout* col) {
     flag(tr("Pixel art"), &WindowSettings::pixelArt);
     flag(tr("Fullscreen"), &WindowSettings::fullscreen);
     flag(tr("Vertical sync"), &WindowSettings::vsync);
+
+    buildBehavior(col);
 }
 
 } // namespace artisan::editor

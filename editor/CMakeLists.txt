@@ -18,8 +18,14 @@ add_executable(artisan WIN32
     ui/WindowChrome.cpp
     ui/HomeScreen.h
     ui/HomeScreen.cpp
-    ui/ObjectsPanel.h
-    ui/ObjectsPanel.cpp
+    ui/Library.h
+    ui/Library.cpp
+    ui/Navigator.h
+    ui/Navigator.cpp
+    ui/ProjectPanels.h
+    ui/ProjectPanels.cpp
+    ui/InspectorPanel.h
+    ui/InspectorPanel.cpp
     ui/Viewport.h
     ui/Viewport.cpp
     ui/NodeEditor.h
@@ -32,7 +38,7 @@ add_executable(artisan WIN32
     ui/MainWindow.cpp)
 set_target_properties(artisan PROPERTIES AUTOMOC ON MACOSX_BUNDLE ON)
 target_include_directories(artisan PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(artisan PRIVATE artisan_engine bestyle Qt6::Widgets Qt6::Gui nlohmann_json::nlohmann_json)
+target_link_libraries(artisan PRIVATE artisan_engine bestyle qtadvanceddocking-qt6 Qt6::Widgets Qt6::Gui nlohmann_json::nlohmann_json)
 target_compile_definitions(artisan PRIVATE ARTISAN_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 # The player goes with the editor: the preview runs it, the export copies it.
 add_dependencies(artisan artisan-player)

@@ -1,7 +1,7 @@
 #pragma once
 
-// The Script tab: the selected object's Lua file, with syntax colors, saved with Ctrl+S (and
-// before the game runs). The Console tab: what the running game prints, and its errors.
+// The Script tab: the Lua file of the selected object (or of the scene), or one opened from the
+// Files panel, with syntax colors, saved with Ctrl+S (and before the game runs). The Console tab: what the running game prints, and its errors.
 
 #include <QWidget>
 
@@ -20,9 +20,11 @@ class ScriptTab : public QWidget {
 public:
     explicit ScriptTab(EditorContext& ctx, QWidget* parent = nullptr);
     bool saveIfChanged(); // false if it could not be written
+    void openFile(const std::filesystem::path& file); // until another object is selected
 
 private:
     void load();
+    void showFile(const std::filesystem::path& file);
     EditorContext& ctx_;
     QStackedWidget* stack_ = nullptr;
     QPlainTextEdit* text_ = nullptr;
@@ -30,6 +32,7 @@ private:
     QLabel* empty_ = nullptr;
     std::filesystem::path file_;
     bool modified_ = false, loading_ = false;
+    bool pinned_ = false; // a file opened by itself, not the selection's
 };
 
 class ConsoleTab : public QWidget {

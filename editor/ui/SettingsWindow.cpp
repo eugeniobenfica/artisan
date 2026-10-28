@@ -2,23 +2,29 @@
 
 #include "app/Exporter.h"
 #include "app/Platform.h"
+#include "app/ProjectIO.h"
 #include "app/Settings.h"
 #include "ui/EditorContext.h"
 #include "ui/Widgets.h"
 
 #include <QApplication>
 #include <QButtonGroup>
+#include <QColorDialog>
 #include <QDialog>
+#include <QDir>
+#include <QFontDatabase>
 #include <QFileDialog>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
-#include <QListWidget>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QScrollArea>
-#include <QStackedWidget>
+#include <QTimer>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace artisan::editor {
 
@@ -26,244 +32,637 @@ using namespace ui;
 
 namespace {
 
-QWidget* hbox(QWidget* a, QWidget* b) {
-    auto* w = new QWidget;
-    auto* row = new QHBoxLayout(w);
-    row->setContentsMargins(0, 0, 0, 0);
-    row->addWidget(a);
-    row->addWidget(b);
-    return w;
+// --- themes ----------------------------------------------------------------------------------
+
+constexpr Rgba kAccentChoices[] = {rgba(232, 185, 49), rgba(242, 140, 40), rgba(239, 111, 94), rgba(233, 85, 154),
+                                   rgba(160, 110, 240), rgba(80, 150, 250), rgba(45, 196, 180), rgba(92, 196, 110)};
+constexpr const char* kOwnTheme = "Custom"; // the palette made in Settings › Theme (Advanced)
+
+std::filesystem::path themesDir() { return platform::appDataDir() / "themes"; }
+
+// The built-in themes, then the ones in the themes folder (imported or saved), by name.
+std::vector<theme::Palette> themeLibrary() {
+    std::vector<theme::Palette> all = {theme::darkPalette(), theme::lightPalette(), theme::midnightPalette(), theme::sunsetPalette()};
+    std::error_code ec;
+    std::vector<std::filesystem::path> files;
+    for (const auto& f : std::filesystem::directory_iterator(themesDir(), ec))
+        if (f.path().extension() == ".json") files.push_back(f.path());
+    std::sort(files.begin(), files.end());
+    for (const auto& f : files) {
+        theme::Palette p;
+        const auto text = platform::readFile(f);
+        if (!text || !theme::paletteFromJson(*text, p)) continue;
+        if (std::none_of(all.begin(), all.end(), [&](const theme::Palette& x) { return x.name == p.name; })) all.push_back(p);
+    }
+    return all;
 }
 
-theme::Palette paletteFor(const std::string& name) {
-    if (name == "Light") return theme::lightPalette();
-    if (name == "Midnight") return theme::midnightPalette();
-    if (name != "Dark" && !settings().customTheme.empty()) {
+theme::Palette baseTheme(const std::string& name) {
+    if (name == kOwnTheme && !settings().customTheme.empty()) {
         theme::Palette p;
         if (theme::paletteFromJson(settings().customTheme, p)) return p;
     }
+    for (const theme::Palette& p : themeLibrary())
+        if (p.name == name) return p;
+    // Before the themes folder, an imported theme lived in customTheme under its own name.
+    if (theme::Palette p; !settings().customTheme.empty() && theme::paletteFromJson(settings().customTheme, p) && p.name == name) return p;
     return theme::darkPalette();
 }
 
-// A theme as a card: its colors in a small window drawing, its name under it.
-class ThemeCard : public QAbstractButton {
-public:
-    ThemeCard(theme::Palette palette) : palette_(theme::resolved(palette)) {
-        setCheckable(true);
-        setCursor(Qt::PointingHandCursor);
-        setFixedSize(150, 112);
-        setToolTip(QString::fromStdString(palette_.name));
-    }
-    std::string name() const { return palette_.name; }
-
-protected:
-    void paintEvent(QPaintEvent*) override {
-        QPainter p(this);
-        Draw d(p);
-        const float w = static_cast<float>(width());
-        const theme::Palette& c = palette_;
-        d.rectFilled({4, 4}, {w - 4, 78}, c.bgDeep, 6);
-        d.rectFilled({8, 8}, {46, 74}, c.bgPanel, 4);       // objects
-        d.rectFilled({50, 8}, {w - 8, 20}, c.header, 3);    // menu bar
-        d.rectFilled({w - 30, 10}, {w - 10, 18}, c.accent, 2); // export
-        d.rectFilled({50, 24}, {w - 8, 74}, c.canvas, 4);   // viewport
-        d.circleFilled({w * 0.62f, 49}, 10, c.accent);
-        for (int i = 0; i < 4; ++i) d.rectFilled({12, 14.0f + i * 10}, {40, 19.0f + i * 10}, i == 1 ? c.accent : c.textFaint, 2);
-        d.rect({4.5f, 4.5f}, {w - 4.5f, 77.5f}, isChecked() ? theme::kAccent : (underMouse() ? theme::kTextFaint : theme::kBorder), 6,
-               isChecked() ? 2.0f : 1.0f);
-        p.setFont(font());
-        const QString n = QString::fromStdString(c.name);
-        p.setPen(theme::q(isChecked() ? theme::kText : theme::kTextDim));
-        p.drawText(QRectF(0, 84, w, 22), Qt::AlignCenter, n);
-    }
-    void enterEvent(QEnterEvent*) override { update(); }
-    void leaveEvent(QEvent*) override { update(); }
-
-private:
-    theme::Palette palette_;
-};
-
-QWidget* page(QWidget* content) {
-    auto* scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidget(content);
-    return scroll;
+Rgba accentOf(const Settings& s, const theme::Palette& base) {
+    Rgba c = base.accent;
+    if (s.customAccent) theme::fromHex(s.accent, c);
+    return c;
 }
 
-QWidget* appearancePage(QDialog* dialog) {
-    auto* w = new QWidget;
-    auto* col = new QVBoxLayout(w);
-    col->setContentsMargins(24, 20, 24, 20);
-    col->setSpacing(12);
-    col->addWidget(label(QObject::tr("Appearance"), Tone::Text, 1.4f, true));
-    col->addWidget(sectionLabel(QObject::tr("Theme")));
-    auto* cards = new QHBoxLayout;
-    cards->setSpacing(12);
-    auto* group = new QButtonGroup(w);
-    std::vector<theme::Palette> palettes = {theme::darkPalette(), theme::lightPalette(), theme::midnightPalette()};
-    if (theme::Palette custom; !settings().customTheme.empty() && theme::paletteFromJson(settings().customTheme, custom)) palettes.push_back(custom);
-    for (const theme::Palette& pal : palettes) {
-        auto* card = new ThemeCard(pal);
-        card->setChecked(settings().theme == pal.name);
-        group->addButton(card);
-        cards->addWidget(card);
-        QObject::connect(card, &QAbstractButton::clicked, w, [card] {
-            settings().theme = card->name();
-            saveSettings();
-            applyTheme();
-        });
-    }
-    cards->addStretch(1);
-    col->addLayout(cards);
+QPointer<PagedWindow> g_settings, g_help;
 
-    auto* card = new SettingsCard;
+void rebuildSettings() {
+    if (g_settings) QTimer::singleShot(0, g_settings, [] {
+            if (g_settings) g_settings->rebuild();
+        });
+}
+
+// Applies, saves and (`rebuild`) draws the page again: its colors come from the theme.
+void changed(bool rebuild = false) {
+    saveSettings();
+    applyTheme();
+    if (rebuild) rebuildSettings();
+}
+
+QPushButton* resetPageButton(std::function<void()> reset) {
+    auto* b = new QPushButton(makeIcon(Icon::Reset, theme::kTextDim, 16), QObject::tr("Reset Page"));
+    b->setToolTip(QObject::tr("Restore this page's defaults"));
+    QObject::connect(b, &QPushButton::clicked, b, [reset] {
+        reset();
+        changed(true);
+    });
+    return b;
+}
+
+Switch* switchControl(bool on, std::function<void(bool)> toggled) {
+    auto* sw = new Switch;
+    sw->setChecked(on);
+    QObject::connect(sw, &QAbstractButton::toggled, sw, std::move(toggled));
+    return sw;
+}
+
+// Every color a theme sets, by group; changing one makes the palette the user's own.
+void addColorSections(QVBoxLayout* col) {
+    struct Entry {
+        const char* label;
+        Rgba theme::Palette::*field;
+    };
+    struct Group {
+        const char* title;
+        std::vector<Entry> entries;
+    };
+    static const Group kGroups[] = {
+        {QT_TR_NOOP("Surfaces"),
+         {{QT_TR_NOOP("Background"), &theme::Palette::bgDeep},
+          {QT_TR_NOOP("Panels"), &theme::Palette::bgPanel},
+          {QT_TR_NOOP("Menu bar and tabs"), &theme::Palette::header},
+          {QT_TR_NOOP("Cards and tiles"), &theme::Palette::bgRaised},
+          {QT_TR_NOOP("Hover"), &theme::Palette::bgHover},
+          {QT_TR_NOOP("Borders"), &theme::Palette::border},
+          {QT_TR_NOOP("Canvas surround"), &theme::Palette::canvas},
+          {QT_TR_NOOP("Menus and tooltips"), &theme::Palette::menu}}},
+        {QT_TR_NOOP("Controls"),
+         {{QT_TR_NOOP("Fields"), &theme::Palette::field},
+          {QT_TR_NOOP("Field outline"), &theme::Palette::fieldBorder},
+          {QT_TR_NOOP("Buttons"), &theme::Palette::button},
+          {QT_TR_NOOP("Button outline"), &theme::Palette::buttonBorder},
+          {QT_TR_NOOP("Focus outline"), &theme::Palette::focus},
+          {QT_TR_NOOP("Selection"), &theme::Palette::selection},
+          {QT_TR_NOOP("Text on accent"), &theme::Palette::onAccent}}},
+        {QT_TR_NOOP("Text"),
+         {{QT_TR_NOOP("Text"), &theme::Palette::text},
+          {QT_TR_NOOP("Secondary text"), &theme::Palette::textDim},
+          {QT_TR_NOOP("Faint text"), &theme::Palette::textFaint}}},
+        {QT_TR_NOOP("Status"),
+         {{QT_TR_NOOP("Danger"), &theme::Palette::danger},
+          {QT_TR_NOOP("Warning"), &theme::Palette::warning},
+          {QT_TR_NOOP("Success"), &theme::Palette::success}}},
+    };
+    const theme::Palette shown = theme::resolved(theme::current());
+    for (const Group& g : kGroups) {
+        SettingsCard* card = addSection(col, QObject::tr(g.title));
+        auto* grid = new QGridLayout;
+        grid->setHorizontalSpacing(24);
+        grid->setVerticalSpacing(10);
+        int i = 0;
+        for (const Entry& e : g.entries) {
+            auto* row = new QHBoxLayout;
+            row->setSpacing(10);
+            auto* button = new ColorButton;
+            button->setFixedSize(28, 22);
+            const Rgba c = shown.*(e.field);
+            button->setColor(Color{red(c) / 255.0f, green(c) / 255.0f, blue(c) / 255.0f, alpha(c) / 255.0f});
+            auto field = e.field;
+            QObject::connect(button, &ColorButton::picked, button, [field](const Color& v) {
+                theme::Palette p = theme::current(); // what is on screen, accent included
+                auto byte = [](float x) { return static_cast<int>(std::lround(std::clamp(x, 0.0f, 1.0f) * 255)); };
+                // 0 means "worked out": a color picked fully transparent black stays just visible.
+                p.*field = std::max<Rgba>(1, rgba(byte(v.r), byte(v.g), byte(v.b), byte(v.a)));
+                p.name = kOwnTheme;
+                settings().customTheme = theme::paletteToJson(p);
+                settings().theme = kOwnTheme;
+                settings().customAccent = false; // the accent is in the palette now
+                changed();
+            });
+            row->addWidget(button);
+            row->addWidget(label(QObject::tr(e.label)), 1);
+            grid->addLayout(row, i / 2, i % 2);
+            ++i;
+        }
+        grid->setColumnStretch(0, 1);
+        grid->setColumnStretch(1, 1);
+        card->addLayout(grid);
+    }
+}
+
+QWidget* themePage() {
+    Settings& s = settings();
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
+    pageHeader(col, QObject::tr("Theme"), resetPageButton([] {
+                   const Settings d;
+                   settings().theme = d.theme;
+                   settings().customAccent = d.customAccent;
+                   settings().accent = d.accent;
+               }));
+
+    SettingsCard* themes = addSection(col, QObject::tr("Theme"));
+    auto* cards = new QGridLayout;
+    cards->setSpacing(10);
+    cards->setAlignment(Qt::AlignLeft);
+    std::vector<theme::Palette> all = themeLibrary();
+    if (theme::Palette own; s.theme == kOwnTheme && theme::paletteFromJson(s.customTheme, own)) all.push_back(own);
+    int n = 0;
+    for (const theme::Palette& t : all) {
+        auto* card = new ThemeCard(t, s.theme == t.name);
+        const std::string name = t.name;
+        QObject::connect(card, &QAbstractButton::clicked, card, [name] {
+            settings().theme = name;
+            changed(true);
+        });
+        cards->addWidget(card, n / 4, n % 4);
+        ++n;
+    }
+    themes->addLayout(cards);
     auto* import = new QPushButton(QObject::tr("Import..."));
-    QObject::connect(import, &QPushButton::clicked, dialog, [dialog] {
-        const QString file = QFileDialog::getOpenFileName(dialog, QObject::tr("Import a Theme"), QString(), QObject::tr("Theme (*.json)"));
+    QObject::connect(import, &QPushButton::clicked, import, [import] {
+        const QString file = QFileDialog::getOpenFileName(import, QObject::tr("Import a Theme"), QString(), QObject::tr("Theme (*.json)"));
         if (file.isEmpty()) return;
         const auto text = platform::readFile(platform::fromQt(file));
         theme::Palette p;
         std::string error;
         if (!text || !theme::paletteFromJson(*text, p, &error)) {
-            QMessageBox::warning(dialog, QObject::tr("Import a Theme"), QObject::tr("Not a theme file: %1").arg(QString::fromStdString(error)));
+            QMessageBox::warning(import, QObject::tr("Import a Theme"), QObject::tr("Not a theme file: %1").arg(QString::fromStdString(error)));
             return;
         }
-        if (p.name == "Dark" || p.name == "Light" || p.name == "Midnight") p.name += " (imported)";
-        settings().customTheme = theme::paletteToJson(p);
+        for (const theme::Palette& b : {theme::darkPalette(), theme::lightPalette(), theme::midnightPalette(), theme::sunsetPalette()})
+            if (p.name == b.name || p.name == kOwnTheme) p.name += " (imported)";
+        std::error_code ec;
+        std::filesystem::create_directories(themesDir(), ec);
+        platform::writeFile(themesDir() / platform::fromQt(file).filename(), theme::paletteToJson(p));
         settings().theme = p.name;
-        saveSettings();
-        applyTheme();
-        dialog->done(2); // reopened to show the new card
+        changed(true);
     });
-    auto* exportTheme = new QPushButton(QObject::tr("Save Current..."));
-    QObject::connect(exportTheme, &QPushButton::clicked, dialog, [dialog] {
-        const QString file = QFileDialog::getSaveFileName(dialog, QObject::tr("Save the Theme"), "theme.json", QObject::tr("Theme (*.json)"));
-        if (!file.isEmpty()) platform::writeFile(platform::fromQt(file), theme::paletteToJson(theme::current()));
+    auto* folder = new QPushButton(QObject::tr("Open Folder"));
+    QObject::connect(folder, &QPushButton::clicked, folder, [] {
+        std::error_code ec;
+        std::filesystem::create_directories(themesDir(), ec);
+        platform::openWithDefaultApp(platform::toQt(themesDir()));
     });
-    card->addRow(QObject::tr("Your own theme"), QObject::tr("Themes are JSON files (the same as bemotion's): import one, or save the current one to start from"),
-                 hbox(import, exportTheme));
-    col->addWidget(card);
+    themes->addRow(QObject::tr("More themes"), QObject::tr("Import a theme someone shared (a .json file, bemotion's too), or open the folder your themes are kept in."),
+                   buttonRow({import, folder}));
 
-    auto* sizes = new SettingsCard;
-    auto* scale = new QWidget;
-    {
-        auto* row = new QHBoxLayout(scale);
-        row->setContentsMargins(0, 0, 0, 0);
-        const float steps[] = {0.9f, 1.0f, 1.15f, 1.3f};
-        int current = 1;
-        for (int i = 0; i < 4; ++i)
-            if (std::abs(settings().uiScale - steps[i]) < 0.01f) current = i;
-        row->addWidget(segmented({QObject::tr("Small"), QObject::tr("Normal"), QObject::tr("Large"), QObject::tr("Larger")}, current, [steps](int i) {
-            settings().uiScale = steps[i];
-            saveSettings();
-            applyTheme();
-        }));
+    SettingsCard* accentCard = addSection(col, QObject::tr("Accent color"));
+    const theme::Palette base = baseTheme(s.theme);
+    auto* accents = new QHBoxLayout;
+    accents->setSpacing(8);
+    auto* own = new Swatch(base.accent, !s.customAccent, QObject::tr("The theme's own"));
+    QObject::connect(own, &QAbstractButton::clicked, own, [] {
+        settings().customAccent = false;
+        changed(true);
+    });
+    accents->addWidget(own);
+    for (Rgba c : kAccentChoices) {
+        auto* sw = new Swatch(c, s.customAccent && accentOf(s, base) == c);
+        QObject::connect(sw, &QAbstractButton::clicked, sw, [c] {
+            settings().customAccent = true;
+            settings().accent = theme::toHex(c);
+            changed(true);
+        });
+        accents->addWidget(sw);
     }
-    sizes->addRow(QObject::tr("Text size"), QObject::tr("The interface's text and controls"), scale);
-    col->addWidget(sizes);
+    accents->addSpacing(8);
+    auto* custom = new QPushButton(QObject::tr("Custom..."));
+    custom->setToolTip(QObject::tr("Pick any color"));
+    QObject::connect(custom, &QPushButton::clicked, custom, [custom] {
+        const QColor c = QColorDialog::getColor(theme::q(theme::kAccent), custom, QObject::tr("Accent Color"));
+        if (!c.isValid()) return;
+        settings().customAccent = true;
+        settings().accent = theme::toHex(rgba(c.red(), c.green(), c.blue()));
+        changed(true);
+    });
+    accents->addWidget(custom);
+    accents->addStretch();
+    accentCard->addLayout(accents);
+
+    if (!s.advanced) {
+        col->addSpacing(6);
+        col->addWidget(hintLabel(QObject::tr("Every color of the theme, and saving your own theme, are in Advanced options (bottom left).")));
+        col->addStretch(1);
+        return page;
+    }
+    col->addSpacing(4);
+    col->addWidget(hintLabel(QObject::tr("Changing anything below turns the current theme into your own palette; Save as Theme keeps it.")));
+    addColorSections(col);
+
+    SettingsCard* share = addSection(col, QObject::tr("Save and share"));
+    auto* name = new QLineEdit;
+    name->setPlaceholderText(QObject::tr("Theme name"));
+    name->setFixedWidth(180);
+    auto* save = new QPushButton(QObject::tr("Save as Theme"));
+    QObject::connect(save, &QPushButton::clicked, save, [name, save] {
+        const std::string n = name->text().trimmed().toStdString();
+        if (n.empty()) return name->setFocus();
+        theme::Palette p = theme::current();
+        p.name = n;
+        std::error_code ec;
+        std::filesystem::create_directories(themesDir(), ec);
+        std::string error;
+        if (!platform::writeFile(themesDir() / platform::fromUtf8(safeFileName(n) + ".json"), theme::paletteToJson(p), &error)) {
+            QMessageBox::warning(save, QObject::tr("Save as Theme"), QString::fromStdString(error));
+            return;
+        }
+        settings().theme = n;
+        settings().customAccent = false;
+        changed(true);
+    });
+    share->addRow(QObject::tr("Your theme"), QObject::tr("Kept in the themes folder: a .json file to share, which bemotion reads too"),
+                  buttonRow({name, save}));
     col->addStretch(1);
-    return page(w);
+    return page;
+}
+
+QWidget* interfacePage() {
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
+    pageHeader(col, QObject::tr("Interface"), resetPageButton([] { settings().uiScale = Settings{}.uiScale; }));
+    SettingsCard* sizes = addSection(col, QObject::tr("Size"));
+    const float steps[] = {0.9f, 1.0f, 1.15f, 1.3f};
+    int current = 1;
+    for (int i = 0; i < 4; ++i)
+        if (std::abs(settings().uiScale - steps[i]) < 0.01f) current = i;
+    sizes->addRow(QObject::tr("Text size"), QObject::tr("The interface's text and controls"),
+                  segmented({QObject::tr("Small"), QObject::tr("Normal"), QObject::tr("Large"), QObject::tr("Larger")}, current, [steps](int i) {
+                      settings().uiScale = steps[i];
+                      changed(true);
+                  }));
+    SettingsCard* panels = addSection(col, QObject::tr("Panels"));
+    panels->addRow(QObject::tr("Arrange the panels"),
+                   QObject::tr("Drag a panel by its tab to another side, beside another panel or out of the window. View › Reset Layout puts "
+                               "them back: the library on the left, the hierarchy, files and inspector on the right."),
+                   nullptr);
+    col->addStretch(1);
+    return page;
 }
 
 QWidget* editorPage() {
-    auto* w = new QWidget;
-    auto* col = new QVBoxLayout(w);
-    col->setContentsMargins(24, 20, 24, 20);
-    col->setSpacing(12);
-    col->addWidget(label(QObject::tr("Editor"), Tone::Text, 1.4f, true));
-    auto* card = new SettingsCard;
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
+    pageHeader(col, QObject::tr("Editor"), resetPageButton([] {
+                   const Settings d;
+                   settings().gridSize = d.gridSize;
+                   settings().showGrid = d.showGrid;
+                   settings().snapToGrid = d.snapToGrid;
+                   settings().saveBeforePlay = d.saveBeforePlay;
+               }));
+    SettingsCard* projects = addSection(col, QObject::tr("Projects"));
     auto* folder = new QPushButton(settings().projectsFolder.empty() ? QObject::tr("Choose...") : QString::fromStdString(settings().projectsFolder));
-    QObject::connect(folder, &QPushButton::clicked, w, [folder] {
+    QObject::connect(folder, &QPushButton::clicked, folder, [folder] {
         const QString f = QFileDialog::getExistingDirectory(folder, QObject::tr("Projects Folder"), QString::fromStdString(settings().projectsFolder));
         if (f.isEmpty()) return;
         settings().projectsFolder = platform::utf8(platform::fromQt(f));
         saveSettings();
         folder->setText(f);
     });
-    card->addRow(QObject::tr("Projects folder"), QObject::tr("Where new projects are made; every project in it shows on the start screen"), folder);
+    projects->addRow(QObject::tr("Projects folder"), QObject::tr("Where new projects are made; every project in it shows on the start screen"), folder);
+    projects->addRow(QObject::tr("Save before playing"), QObject::tr("The preview runs the project as saved"), switchControl(settings().saveBeforePlay, [](bool on) {
+                         settings().saveBeforePlay = on;
+                         saveSettings();
+                     }));
+
+    SettingsCard* view = addSection(col, QObject::tr("Viewport"));
     auto* grid = new DragValue;
     grid->setRange(4, 512);
     grid->setFormat("%.0f px");
     grid->setValue(static_cast<float>(settings().gridSize));
-    QObject::connect(grid, &DragValue::valueChanged, w, [](float v) {
+    grid->setMinimumWidth(90);
+    QObject::connect(grid, &DragValue::valueChanged, grid, [](float v) {
         settings().gridSize = static_cast<int>(std::lround(v));
         saveSettings();
     });
-    grid->setMinimumWidth(90);
-    card->addRow(QObject::tr("Grid size"), QObject::tr("The viewport's grid, and the step objects snap to"), grid);
-    auto* save = new Switch;
-    save->setChecked(settings().saveBeforePlay);
-    QObject::connect(save, &QAbstractButton::toggled, w, [](bool on) {
-        settings().saveBeforePlay = on;
-        saveSettings();
-    });
-    card->addRow(QObject::tr("Save before playing"), QObject::tr("The preview runs the project as saved"), save);
-    col->addWidget(card);
+    view->addRow(QObject::tr("Grid size"), QObject::tr("The viewport's grid, and the step objects snap to"), grid);
+    view->addRow(QObject::tr("Show the grid"), QObject::tr("Also the grid button over the viewport"), switchControl(settings().showGrid, [](bool on) {
+                     settings().showGrid = on;
+                     saveSettings();
+                 }));
+    view->addRow(QObject::tr("Snap to the grid"), QObject::tr("Dragged objects land on the grid; hold Shift for the other way"),
+                 switchControl(settings().snapToGrid, [](bool on) {
+                     settings().snapToGrid = on;
+                     saveSettings();
+                 }));
     col->addStretch(1);
-    return page(w);
+    return page;
+}
+
+// --- shortcuts ---------------------------------------------------------------------------------
+
+struct Shortcut {
+    const char* action;
+    const char* keys; // "Ctrl+S", alternatives with " / "
+};
+struct ShortcutGroup {
+    const char* title;
+    std::vector<Shortcut> items;
+};
+
+const std::vector<ShortcutGroup>& shortcutGroups() {
+    static const std::vector<ShortcutGroup> groups = {
+        {QT_TR_NOOP("Project"),
+         {{QT_TR_NOOP("Save"), "Ctrl+S"},
+          {QT_TR_NOOP("Export the game"), "Ctrl+E"},
+          {QT_TR_NOOP("Settings"), "Ctrl+,"},
+          {QT_TR_NOOP("Help"), "F1"},
+          {QT_TR_NOOP("Quit"), "Ctrl+Q"}}},
+        {QT_TR_NOOP("Editing"),
+         {{QT_TR_NOOP("Undo"), "Ctrl+Z"},
+          {QT_TR_NOOP("Redo"), "Ctrl+Y"},
+          {QT_TR_NOOP("Duplicate"), "Ctrl+D"},
+          {QT_TR_NOOP("Delete"), "Delete"},
+          {QT_TR_NOOP("Deselect (the scene is selected)"), "Esc"},
+          {QT_TR_NOOP("Back / forward in the navigator"), "Alt+Left / Alt+Right"}}},
+        {QT_TR_NOOP("Game"), {{QT_TR_NOOP("Play"), "F5"}, {QT_TR_NOOP("Stop"), "Shift+F5"}}},
+        {QT_TR_NOOP("Viewport"),
+         {{QT_TR_NOOP("Zoom"), "Wheel"},
+          {QT_TR_NOOP("Pan"), "Middle drag / Right drag / Space+drag"},
+          {QT_TR_NOOP("Snap the other way"), "Shift+drag"}}},
+        {QT_TR_NOOP("Nodes"),
+         {{QT_TR_NOOP("Add a node"), "Right-click / Double-click"},
+          {QT_TR_NOOP("Cut a pin's wires"), "Alt+click"},
+          {QT_TR_NOOP("Delete the node"), "Delete"},
+          {QT_TR_NOOP("Frame all nodes"), "F"}}},
+    };
+    return groups;
+}
+
+// "Ctrl+S / Ctrl+Y" drawn as key caps.
+class KeyCaps : public QWidget {
+public:
+    explicit KeyCaps(const QString& keys) {
+        for (const QString& alt : keys.split(" / ")) caps_.push_back(alt.split('+'));
+        QFont f = font();
+        f.setPointSizeF(f.pointSizeF() * 0.9);
+        setFont(f);
+        setMinimumSize(sizeHint());
+    }
+    QSize sizeHint() const override {
+        int w = 0;
+        for (size_t i = 0; i < caps_.size(); ++i) {
+            if (i) w += fontMetrics().horizontalAdvance(" or ") + 8;
+            for (const QString& k : caps_[i]) w += fontMetrics().horizontalAdvance(k) + 14 + 4;
+        }
+        return {w, fontMetrics().height() + 10};
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        Draw d(p);
+        float x = static_cast<float>(width() - sizeHint().width());
+        const float h = static_cast<float>(height());
+        for (size_t i = 0; i < caps_.size(); ++i) {
+            if (i) {
+                const QString orText = QObject::tr("or");
+                d.text({x + 4, (h - d.textHeight()) / 2}, theme::kTextFaint, orText);
+                x += fontMetrics().horizontalAdvance(" or ") + 8;
+            }
+            for (const QString& k : caps_[i]) {
+                const float w = fontMetrics().horizontalAdvance(k) + 14.0f;
+                d.rectFilled({x, 2}, {x + w, h - 2}, theme::kField, 4);
+                d.rect({x + 0.5f, 2.5f}, {x + w - 0.5f, h - 2.5f}, theme::kFieldBorder, 4);
+                d.text({x + 7, (h - d.textHeight()) / 2}, theme::kText, k);
+                x += w + 4;
+            }
+        }
+    }
+
+private:
+    std::vector<QStringList> caps_;
+};
+
+QWidget* shortcutsPage() {
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
+    pageHeader(col, QObject::tr("Shortcuts"));
+    auto* search = new QLineEdit;
+    search->setPlaceholderText(QObject::tr("Search actions or keys"));
+    search->setClearButtonEnabled(true);
+    col->addWidget(search);
+    std::vector<std::pair<QWidget*, QString>> rows; // each row and what the search finds it by
+    std::vector<std::pair<QWidget*, std::vector<QWidget*>>> sections;
+    for (const ShortcutGroup& g : shortcutGroups()) {
+        const int before = col->count();
+        SettingsCard* card = addSection(col, QObject::tr(g.title));
+        std::vector<QWidget*> extra;
+        for (int i = before; i < col->count(); ++i)
+            if (QWidget* w = col->itemAt(i)->widget()) extra.push_back(w);
+        std::vector<QWidget*> mine;
+        for (const Shortcut& s : g.items) {
+            QWidget* row = card->addRow(QObject::tr(s.action), {}, new KeyCaps(s.keys));
+            row->setMinimumHeight(40);
+            rows.push_back({row, (QObject::tr(s.action) + " " + s.keys).toLower()});
+            mine.push_back(row);
+        }
+        sections.push_back({card, mine});
+        for (QWidget* w : extra)
+            if (w != card) sections.push_back({w, mine});
+    }
+    QObject::connect(search, &QLineEdit::textChanged, page, [rows, sections](const QString& text) {
+        const QString t = text.trimmed().toLower();
+        for (const auto& [row, words] : rows) row->setVisible(t.isEmpty() || words.contains(t));
+        for (const auto& [w, mine] : sections)
+            w->setVisible(std::any_of(mine.begin(), mine.end(), [](QWidget* r) { return !r->isHidden(); }));
+    });
+    col->addStretch(1);
+    return page;
+}
+
+// --- help --------------------------------------------------------------------------------------
+
+QPushButton* linkButton(const QString& text, const QString& url) {
+    auto* b = new QPushButton(makeIcon(Icon::ArrowRight, theme::kTextDim, 16), text);
+    QObject::connect(b, &QPushButton::clicked, b, [url] { platform::openWithDefaultApp(url); });
+    return b;
+}
+
+QString docPath(const char* file) { return platform::toQt(std::filesystem::path(ARTISAN_SOURCE_DIR) / "docs" / file); }
+
+QWidget* startPage() {
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
+    pageHeader(col, QObject::tr("Getting started"));
+    col->addWidget(paragraph(QObject::tr("A game is a project folder: its scenes, the scripts in scripts/ and the pictures in assets/. Here is "
+                                         "how the editor is laid out.")));
+    SettingsCard* card = addSection(col, QObject::tr("The workspace"));
+    card->addRow(QObject::tr("Library (left)"), QObject::tr("Ready-made objects: a player that already moves, shapes, sprites, lights. Click "
+                                                            "one to add it where the camera looks. In the Nodes view it lists the nodes instead: "
+                                                            "click to add, or drag one onto the graph."),
+                 nullptr);
+    card->addRow(QObject::tr("Scenes (top)"), QObject::tr("Each scene is a tab. The + adds one; right-click a tab to rename it, duplicate it or "
+                                                         "make it the one the game starts with. The navigator beside it goes back and forward "
+                                                         "through what you selected."),
+                 nullptr);
+    card->addRow(QObject::tr("Hierarchy and Files (right)"), QObject::tr("The scene and its objects, in drawing order (drag to reorder); the "
+                                                                       "project's files, to open a script or add a picture as a sprite."),
+                 nullptr);
+    card->addRow(QObject::tr("Inspector (right)"), QObject::tr("The selected object's components, or the scene's settings when the scene is "
+                                                              "selected."),
+                 nullptr);
+    card->addRow(QObject::tr("Panels anywhere"), QObject::tr("Drag a panel by its tab to another side, or out of the window. View › Reset "
+                                                            "Layout brings the first layout back."),
+                 nullptr);
+    SettingsCard* behavior = addSection(col, QObject::tr("Behavior"));
+    behavior->addRow(QObject::tr("Nodes or Lua"), QObject::tr("An object, or the scene itself, can have a node graph and a Lua script. Select "
+                                                              "it, then open the Nodes or Script view."),
+                     nullptr);
+    behavior->addRow(QObject::tr("Play"), QObject::tr("F5 runs the game in its own window; what it prints shows in the Console."), nullptr);
+    col->addStretch(1);
+    return page;
+}
+
+QWidget* scriptingPage() {
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
+    pageHeader(col, QObject::tr("Scripting"));
+    SettingsCard* card = addSection(col, QObject::tr("Guides"));
+    card->addRow(QObject::tr("Scripting reference"), QObject::tr("Every Lua function and node: objects, input, time, the camera, the scene"),
+                 linkButton(QObject::tr("Open"), docPath("SCRIPTING.md")));
+    card->addRow(QObject::tr("How Artisan works"), QObject::tr("The engine, the player and the editor; how scenes are drawn"),
+                 linkButton(QObject::tr("Open"), docPath("ARCHITECTURE.md")));
+    card->addRow(QObject::tr("Online"), QObject::tr("The project's page, its documentation and news"),
+                 linkButton(QObject::tr("Visit"), "https://github.com/eugeniobenfica/artisan#readme"));
+    SettingsCard* lua = addSection(col, QObject::tr("A script, in short"));
+    auto* code = new QLabel("function start(self)\n    log(\"Hello from \" .. self.name)\nend\n\nfunction update(self, dt)\n"
+                            "    if input.down(\"right\") then self.x = self.x + 300 * dt end\nend");
+    code->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    code->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    setTone(code, Tone::Text);
+    lua->addContent(code);
+    col->addStretch(1);
+    return page;
 }
 
 QWidget* aboutPage(const QString& gpu) {
-    auto* w = new QWidget;
-    auto* col = new QVBoxLayout(w);
-    col->setContentsMargins(24, 20, 24, 20);
-    col->setSpacing(10);
+    QVBoxLayout* col;
+    QWidget* page = pageWidget(col);
     auto* brand = new QHBoxLayout;
+    brand->setSpacing(14);
     brand->addWidget(new LogoMark(56));
     auto* names = new QVBoxLayout;
     names->addWidget(label("Artisan", Tone::Text, 1.8f, true));
     names->addWidget(label(QObject::tr("Version %1  ·  a minimal, fast 2D game engine").arg(ARTISAN_VERSION), Tone::TextDim));
     brand->addLayout(names, 1);
     col->addLayout(brand);
-    auto* card = new SettingsCard;
+    SettingsCard* card = addSection(col, QObject::tr("About"));
     card->addRow(QObject::tr("Graphics"), gpu.isEmpty() ? QObject::tr("Vulkan") : QObject::tr("Vulkan on %1").arg(gpu), nullptr);
     card->addRow(QObject::tr("Scripting"), QObject::tr("Lua 5.4, and node graphs that compile to Lua"), nullptr);
     card->addRow(QObject::tr("Exports to"), QObject::tr("Windows, Linux, macOS and Android"), nullptr);
-    card->addRow(QObject::tr("Built with"), QObject::tr("Qt %1, SDL 3, volk, Lua, nlohmann/json, stb, Inter").arg(qVersion()), nullptr);
-    card->addRow(QObject::tr("License"), QObject::tr("MIT: free and open source"), nullptr);
-    col->addWidget(card);
+    SettingsCard* credits = addSection(col, QObject::tr("Credits"));
+    credits->addRow(QObject::tr("Built with"), QObject::tr("Qt %1, Qt Advanced Docking System, SDL 3, volk, Lua, nlohmann/json, stb, Inter").arg(qVersion()),
+                    nullptr);
+    credits->addRow(QObject::tr("The look"), QObject::tr("bestyle, shared with bemotion"), nullptr);
+    credits->addRow(QObject::tr("License"), QObject::tr("MIT: free and open source"), nullptr);
     col->addStretch(1);
-    return page(w);
+    return page;
 }
 
 } // namespace
 
 void applyTheme() {
-    theme::Palette p = paletteFor(settings().theme);
+    const Settings& s = settings();
+    theme::Palette p = baseTheme(s.theme);
+    if (s.customAccent && theme::fromHex(s.accent, p.accent)) p.onAccent = 0; // worked out for the new accent
     QFont f("Inter");
-    f.setPointSizeF(9.5 * settings().uiScale);
+    f.setPointSizeF(9.5 * s.uiScale);
     QApplication::setFont(f);
     theme::apply(p);
 }
 
-void openSettings(QWidget* parent, const QString& gpuName) {
-    for (;;) {
-        QDialog dialog(parent);
-        dialog.setWindowTitle(QObject::tr("Settings"));
-        dialog.resize(860, 560);
-        auto* row = new QHBoxLayout(&dialog);
-        row->setContentsMargins(0, 0, 0, 0);
-        row->setSpacing(0);
-        auto* pages = new QListWidget;
-        pages->setFixedWidth(190);
-        pages->setFrameShape(QFrame::NoFrame);
-        pages->setIconSize(QSize(18, 18));
-        pages->setSpacing(2);
-        auto* stack = new QStackedWidget;
-        auto add = [&](Icon icon, const QString& name, QWidget* w) {
-            pages->addItem(new QListWidgetItem(menuIcon(icon, theme::kTextDim), name));
-            stack->addWidget(w);
-        };
-        add(Icon::Palette, QObject::tr("Appearance"), appearancePage(&dialog));
-        add(Icon::Edit, QObject::tr("Editor"), editorPage());
-        add(Icon::Help, QObject::tr("About"), aboutPage(gpuName));
-        QObject::connect(pages, &QListWidget::currentRowChanged, stack, &QStackedWidget::setCurrentIndex);
-        pages->setCurrentRow(0);
-        row->addWidget(pages);
-        row->addWidget(stack, 1);
-        if (dialog.exec() != 2) return;
+QWidget* openSettings(QWidget* parent) {
+    if (!g_settings) {
+        auto* footer = new QWidget;
+        auto* footerCol = new QVBoxLayout(footer);
+        footerCol->setContentsMargins(0, 0, 0, 0);
+        footerCol->setSpacing(6);
+        auto* advancedRow = new QHBoxLayout;
+        advancedRow->setContentsMargins(8, 0, 4, 0);
+        auto* advancedLabel = label(QObject::tr("Advanced options"));
+        advancedLabel->setToolTip(QObject::tr("Every page shows all its options (each color of the theme)"));
+        advancedRow->addWidget(advancedLabel, 1);
+        auto* advanced = switchControl(settings().advanced, [](bool on) {
+            settings().advanced = on;
+            saveSettings();
+            rebuildSettings();
+        });
+        advanced->setToolTip(advancedLabel->toolTip());
+        advancedRow->addWidget(advanced);
+        footerCol->addLayout(advancedRow);
+        auto* resetAll = new QPushButton(QObject::tr("Reset All"));
+        resetAll->setToolTip(QObject::tr("Restore every setting to its default"));
+        footerCol->addWidget(resetAll);
+        g_settings = new PagedWindow(QObject::tr("Settings"),
+                                     {{QObject::tr("Theme"), Icon::Palette, themePage},
+                                      {QObject::tr("Interface"), Icon::Sliders, interfacePage},
+                                      {QObject::tr("Editor"), Icon::Edit, editorPage},
+                                      {QObject::tr("Shortcuts"), Icon::Keyboard, shortcutsPage}},
+                                     footer, parent);
+        g_settings->setAttribute(Qt::WA_DeleteOnClose, false);
+        QObject::connect(resetAll, &QPushButton::clicked, g_settings, [] {
+            if (QMessageBox::question(g_settings, QObject::tr("Reset All"), QObject::tr("Reset every setting to its default? Projects and recent files stay.")) !=
+                QMessageBox::Yes)
+                return;
+            Settings fresh;
+            fresh.projectsFolder = settings().projectsFolder;
+            fresh.recents = settings().recents;
+            fresh.advanced = settings().advanced; // a way of looking, not a preference
+            fresh.dockLayout = settings().dockLayout;
+            settings() = fresh;
+            changed(true);
+        });
+        g_settings->showPage(0);
     }
+    g_settings->present();
+    return g_settings;
+}
+
+QWidget* openHelp(QWidget* parent, HelpPage which, const QString& gpuName) {
+    if (!g_help) {
+        g_help = new PagedWindow(QObject::tr("Help"),
+                                 {{QObject::tr("Getting started"), Icon::Play, startPage},
+                                  {QObject::tr("Shortcuts"), Icon::Keyboard, shortcutsPage},
+                                  {QObject::tr("Scripting"), Icon::Code, scriptingPage},
+                                  {QObject::tr("About"), Icon::Help, [gpuName] { return aboutPage(gpuName); }}},
+                                 nullptr, parent);
+        g_help->setAttribute(Qt::WA_DeleteOnClose, false);
+    }
+    g_help->showPage(static_cast<int>(which));
+    g_help->present();
+    return g_help;
 }
 
 void openExportDialog(EditorContext& ctx, QWidget* parent) {

@@ -2,11 +2,13 @@
 
 #include "artisan/nodes/NodeCompiler.h"
 #include "ui/EditorContext.h"
+#include "ui/Library.h"
 #include "ui/Widgets.h"
 
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMouseEvent>
@@ -28,47 +30,82 @@ using namespace ui;
 namespace {
 
 constexpr float kNodeWidth = 200.0f;
-constexpr float kHeader = 28.0f;
+constexpr float kHeader = 30.0f;
 constexpr float kRow = 24.0f;
-constexpr float kPinR = 5.0f;
+constexpr float kPinR = 4.5f;
 
-QColor pinColor(PinType t) {
+// Data pins by type; execution pins are drawn in the text color (they follow the theme).
+Rgba pinColor(PinType t) {
     switch (t) {
-    case PinType::Exec: return QColor(235, 235, 240);
-    case PinType::Number: return QColor(120, 220, 140);
-    case PinType::Bool: return QColor(230, 90, 90);
-    case PinType::String: return QColor(240, 120, 200);
-    case PinType::Any: return QColor(160, 160, 175);
+    case PinType::Exec: return theme::kText;
+    case PinType::Number: return rgba(92, 196, 110);
+    case PinType::Bool: return rgba(239, 111, 94);
+    case PinType::String: return rgba(233, 85, 154);
+    case PinType::Any: return theme::kTextDim;
     }
-    return Qt::gray;
-}
-
-QColor categoryColor(const std::string& c) {
-    static const std::map<std::string, QColor> colors = {
-        {"Events", QColor(196, 62, 62)},   {"Actions", QColor(58, 112, 200)}, {"Flow", QColor(120, 120, 130)},
-        {"Math", QColor(48, 150, 96)},     {"Logic", QColor(170, 70, 120)},  {"Input", QColor(196, 150, 40)},
-        {"Values", QColor(120, 90, 190)},  {"Variables", QColor(60, 160, 170)}, {"Object", QColor(70, 130, 160)},
-        {"Time", QColor(150, 120, 60)}};
-    auto it = colors.find(c);
-    return it != colors.end() ? it->second : QColor(100, 100, 110);
-}
-
-const std::vector<std::string>& categories() {
-    static const std::vector<std::string> order = {"Events", "Actions", "Flow", "Object", "Input", "Time", "Math", "Logic", "Values", "Variables"};
-    return order;
+    return theme::kTextDim;
 }
 
 } // namespace
 
+const std::vector<std::string>& nodeCategories() {
+    static const std::vector<std::string> order = {"Events", "Actions", "Flow", "Object", "Input", "Time", "Math", "Logic", "Values", "Variables"};
+    return order;
+}
+
+Icon nodeCategoryIcon(const std::string& c) {
+    static const std::map<std::string, Icon> icons = {{"Events", Icon::Play},     {"Actions", Icon::Pointer}, {"Flow", Icon::Transition},
+                                                      {"Object", Icon::Cube},     {"Input", Icon::Keyboard},  {"Time", Icon::Speed},
+                                                      {"Math", Icon::Expression}, {"Logic", Icon::Diamond},   {"Values", Icon::Counter},
+                                                      {"Variables", Icon::Table}};
+    auto it = icons.find(c);
+    return it != icons.end() ? it->second : Icon::Graph;
+}
+
+Rgba nodeCategoryColor(const std::string& c) {
+    static const std::map<std::string, Rgba> colors = {
+        {"Events", rgba(239, 111, 94)}, {"Actions", rgba(80, 150, 250)}, {"Flow", rgba(150, 150, 165)}, {"Object", rgba(45, 196, 180)},
+        {"Input", rgba(232, 185, 49)},  {"Time", rgba(242, 140, 40)},    {"Math", rgba(92, 196, 110)},  {"Logic", rgba(233, 85, 154)},
+        {"Values", rgba(160, 110, 240)}, {"Variables", rgba(110, 168, 255)}};
+    auto it = colors.find(c);
+    return it != colors.end() ? it->second : rgba(150, 150, 165);
+}
+
 NodeCanvas::NodeCanvas(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx_(ctx) {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
+    setAcceptDrops(true); // nodes from the library
     setMinimumSize(200, 200);
 }
 
 NodeGraph* NodeCanvas::graph() {
-    Entity* e = ctx_.selected();
-    return e && e->graph ? &*e->graph : nullptr;
+    std::optional<NodeGraph>& g = ctx_.graph();
+    return g ? &*g : nullptr;
+}
+
+void NodeCanvas::addNode(const std::string& type, std::optional<QPointF> screen) {
+    NodeGraph* g = graph();
+    if (!g || !findNodeDef(type)) return;
+    const QPointF at = toGraph(screen.value_or(QPointF(width() / 2.0, height() / 2.0)));
+    ctx_.checkpoint();
+    Node& n = g->add(type, static_cast<float>(at.x() - kNodeWidth / 2), static_cast<float>(at.y() - kHeader / 2));
+    selected_ = n.id;
+    edited();
+    setFocus();
+}
+
+void NodeCanvas::dragEnterEvent(QDragEnterEvent* e) {
+    if (graph() && e->mimeData()->hasFormat(kNodeMime)) e->acceptProposedAction();
+}
+
+void NodeCanvas::dragMoveEvent(QDragMoveEvent* e) {
+    if (graph() && e->mimeData()->hasFormat(kNodeMime)) e->acceptProposedAction();
+}
+
+void NodeCanvas::dropEvent(QDropEvent* e) {
+    if (!e->mimeData()->hasFormat(kNodeMime)) return;
+    addNode(e->mimeData()->data(kNodeMime).toStdString(), e->position());
+    e->acceptProposedAction();
 }
 
 QRectF NodeCanvas::nodeRect(const Node& n, const NodeDef& def) const {
@@ -141,23 +178,28 @@ void NodeCanvas::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.fillRect(rect(), theme::q(theme::kBgDeep));
-    // Dots every 32 units.
+    // Dots every 32 units, stronger every 4th.
     const float step = 32.0f * zoom_;
     if (step > 6) {
-        p.setPen(QPen(theme::q(theme::ink(28)), 1.5f));
-        for (float x = std::fmod(static_cast<float>(pan_.x()), step); x < width(); x += step)
-            for (float y = std::fmod(static_cast<float>(pan_.y()), step); y < height(); y += step) p.drawPoint(QPointF(x, y));
+        const int firstX = static_cast<int>(std::ceil(-pan_.x() / step)), firstY = static_cast<int>(std::ceil(-pan_.y() / step));
+        for (int ix = firstX; ix * step + pan_.x() < width(); ++ix)
+            for (int iy = firstY; iy * step + pan_.y() < height(); ++iy) {
+                const bool major = ix % 4 == 0 && iy % 4 == 0;
+                p.setPen(QPen(theme::q(theme::ink(major ? 50 : 24)), major ? 2.5f : 1.5f, Qt::SolidLine, Qt::RoundCap));
+                p.drawPoint(QPointF(ix * step + pan_.x(), iy * step + pan_.y()));
+            }
     }
     NodeGraph* g = graph();
     if (!g) return;
     p.translate(pan_);
     p.scale(zoom_, zoom_);
+    const float radius = theme::current().rounding + 3.0f;
 
-    auto wire = [&](QPointF a, QPointF b, QColor c, float width) {
+    auto wire = [&](QPointF a, QPointF b, Rgba c, float width) {
         const float dx = std::max(40.0f, static_cast<float>(std::fabs(b.x() - a.x())) * 0.5f);
         QPainterPath path(a);
         path.cubicTo(a + QPointF(dx, 0), b - QPointF(dx, 0), b);
-        p.setPen(QPen(c, width, Qt::SolidLine, Qt::RoundCap));
+        p.setPen(QPen(theme::q(c), width, Qt::SolidLine, Qt::RoundCap));
         p.setBrush(Qt::NoBrush);
         p.drawPath(path);
     };
@@ -168,7 +210,10 @@ void NodeCanvas::paintEvent(QPaintEvent*) {
         const NodeDef* bd = b ? findNodeDef(b->type) : nullptr;
         if (!ad || !bd || !ad->output(l.fromPin)) continue;
         const PinType t = ad->output(l.fromPin)->type;
-        wire(pinPos(*a, *ad, l.fromPin, true), pinPos(*b, *bd, l.toPin, false), pinColor(t), t == PinType::Exec ? 3.0f : 2.2f);
+        // The selected node's wires stand out.
+        const bool lit = a->id == selected_ || b->id == selected_;
+        const Rgba c = t == PinType::Exec ? (lit ? theme::kAccent : theme::withAlpha(theme::kText, 170)) : theme::withAlpha(pinColor(t), lit ? 255 : 200);
+        wire(pinPos(*a, *ad, l.fromPin, true), pinPos(*b, *bd, l.toPin, false), c, t == PinType::Exec ? 2.6f : 2.0f);
     }
     if (drag_ == Drag::Wire && wireFrom_) {
         const Node* n = g->find(wireFrom_.node);
@@ -176,69 +221,72 @@ void NodeCanvas::paintEvent(QPaintEvent*) {
         if (d) {
             const PinDef* pin = wireFrom_.output ? d->output(wireFrom_.pin) : d->input(wireFrom_.pin);
             const QPointF a = pinPos(*n, *d, wireFrom_.pin, wireFrom_.output), b = toGraph(mouse_);
-            wire(wireFrom_.output ? a : b, wireFrom_.output ? b : a, pin ? pinColor(pin->type) : Qt::white, 2.0f);
+            wire(wireFrom_.output ? a : b, wireFrom_.output ? b : a, pin ? pinColor(pin->type) : theme::kText, 2.0f);
         }
     }
 
     QFont f = font();
     QFont bold = f;
     bold.setWeight(QFont::DemiBold);
+    Draw d(p);
     for (const Node& n : g->nodes) {
-        const NodeDef* d = findNodeDef(n.type);
-        if (!d) continue;
-        const QRectF r = nodeRect(n, *d);
-        // Body, header in the category's color.
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0, 0, 0, 60));
-        p.drawRoundedRect(r.translated(0, 3), 8, 8);
-        p.setBrush(theme::q(theme::kBgRaised));
-        p.drawRoundedRect(r, 8, 8);
-        QPainterPath head;
-        head.addRoundedRect(QRectF(r.left(), r.top(), r.width(), kHeader + 8), 8, 8);
-        QPainterPath clip;
-        clip.addRect(QRectF(r.left(), r.top(), r.width(), kHeader));
-        p.setBrush(categoryColor(d->category));
-        p.drawPath(head.intersected(clip));
-        p.setPen(QPen(n.id == selected_ ? theme::q(theme::kAccent) : theme::q(theme::kBorder), n.id == selected_ ? 2.0 : 1.0));
-        p.setBrush(Qt::NoBrush);
-        p.drawRoundedRect(r, 8, 8);
+        const NodeDef* def = findNodeDef(n.type);
+        if (!def) continue;
+        const QRectF r = nodeRect(n, *def);
+        const Rgba cat = nodeCategoryColor(def->category);
+        const bool sel = n.id == selected_;
+        // A raised card with a soft shadow, its header tinted with the category's color.
+        d.rectFilled(Pt(r.left(), r.top() + 3), Pt(r.right(), r.bottom() + 3), theme::shade(70), radius);
+        d.rectFilled(Pt(r.topLeft()), Pt(r.bottomRight()), theme::kBgRaised, radius);
+        QPainterPath card;
+        card.addRoundedRect(r, radius, radius);
+        p.save();
+        p.setClipPath(card);
+        p.fillRect(QRectF(r.left(), r.top(), r.width(), kHeader), theme::q(theme::withAlpha(cat, theme::current().light ? 46 : 38)));
+        p.fillRect(QRectF(r.left(), r.top(), 3, kHeader), theme::q(cat)); // the category's mark
+        p.restore();
+        d.line(Pt(r.left(), r.top() + kHeader), Pt(r.right(), r.top() + kHeader), theme::kBorder, 1.0f);
+        d.rect(Pt(r.topLeft()), Pt(r.bottomRight()), sel ? theme::kAccent : theme::kBorder, radius, sel ? 2.0f : 1.0f);
+        drawIcon(d, nodeCategoryIcon(def->category), Pt(r.left() + 18, r.top() + kHeader / 2), 14.0f, cat);
         p.setFont(bold);
-        p.setPen(QColor(255, 255, 255));
-        p.drawText(QRectF(r.left() + 10, r.top(), r.width() - 20, kHeader), Qt::AlignVCenter | Qt::AlignLeft, QString::fromStdString(d->title));
+        p.setPen(theme::q(theme::kText));
+        p.drawText(QRectF(r.left() + 32, r.top(), r.width() - 40, kHeader), Qt::AlignVCenter | Qt::AlignLeft,
+                   p.fontMetrics().elidedText(QString::fromStdString(def->title), Qt::ElideRight, static_cast<int>(r.width() - 40)));
         p.setFont(f);
 
         for (bool out : {false, true}) {
-            const auto& pins = out ? d->outputs : d->inputs;
+            const auto& pins = out ? def->outputs : def->inputs;
             for (size_t i = 0; i < pins.size(); ++i) {
                 const PinDef& pin = pins[i];
-                const QPointF c = pinPos(n, *d, pin.name, out);
+                const QPointF c = pinPos(n, *def, pin.name, out);
                 const bool linked = out ? !g->linksFrom(n.id, pin.name).empty() : g->linkInto(n.id, pin.name) != nullptr;
-                const QColor col = pinColor(pin.type);
-                p.setPen(QPen(col, 1.5));
-                p.setBrush(linked ? col : theme::q(theme::kBgRaised));
-                if (pin.type == PinType::Exec) {
+                const Rgba col = pinColor(pin.type);
+                p.setPen(QPen(theme::q(col), 1.5));
+                p.setBrush(linked ? theme::q(col) : theme::q(theme::kBgRaised));
+                if (pin.type == PinType::Exec) { // a small arrow: the order things happen
                     const QPointF tri[] = {c + QPointF(-kPinR, -kPinR - 1), c + QPointF(kPinR + 1, 0), c + QPointF(-kPinR, kPinR + 1)};
                     p.drawPolygon(tri, 3);
                 } else {
                     p.drawEllipse(c, kPinR, kPinR);
                 }
-                const bool label = !(pin.type == PinType::Exec && (pin.name == "in" || pin.name == "then"));
+                const bool named = !(pin.type == PinType::Exec && (pin.name == "in" || pin.name == "then"));
                 p.setPen(theme::q(theme::kTextDim));
-                if (label) {
+                if (named) {
                     const QRectF lr = out ? QRectF(c.x() - 120, c.y() - kRow / 2, 110, kRow) : QRectF(c.x() + 12, c.y() - kRow / 2, 70, kRow);
                     p.drawText(lr, Qt::AlignVCenter | (out ? Qt::AlignRight : Qt::AlignLeft), QString::fromStdString(pin.name));
                 }
                 // A value typed in for an input with no wire.
                 if (!out && pin.type != PinType::Exec && !linked) {
-                    const QRectF vr = valueRect(n, *d, static_cast<int>(i));
-                    p.setPen(QPen(theme::q(theme::kFieldBorder), 1));
-                    p.setBrush(theme::q(theme::kField));
-                    p.drawRoundedRect(vr, 4, 4);
+                    const QRectF vr = valueRect(n, *def, static_cast<int>(i));
+                    const float fr = theme::current().rounding;
+                    d.rectFilled(Pt(vr.topLeft()), Pt(vr.bottomRight()), theme::kField, fr);
+                    d.rect(Pt(vr.topLeft()), Pt(vr.bottomRight()), theme::kFieldBorder, fr, 1.0f);
                     auto it = n.values.find(pin.name);
                     QString text = QString::fromStdString(it != n.values.end() ? it->second : pin.defaultValue);
                     if (pin.type == PinType::Bool) text = text == "true" ? "✓ true" : "false";
                     p.setPen(theme::q(theme::kText));
-                    p.drawText(vr.adjusted(6, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft, p.fontMetrics().elidedText(text, Qt::ElideRight, static_cast<int>(vr.width() - 10)));
+                    p.drawText(vr.adjusted(6, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                               p.fontMetrics().elidedText(text, Qt::ElideRight, static_cast<int>(vr.width() - 10)));
                 }
             }
         }
@@ -425,7 +473,7 @@ void NodeCanvas::openAddMenu(QPoint global, QPointF at, PinRef from) {
         }
         return nullptr;
     };
-    for (const std::string& cat : categories()) {
+    for (const std::string& cat : nodeCategories()) {
         QMenu* sub = nullptr;
         for (const NodeDef& d : nodeLibrary()) {
             if (d.category != cat || (fromPin && !fits(d))) continue;
@@ -521,13 +569,11 @@ NodesTab::NodesTab(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx_(
     create->setFixedWidth(200);
     createButton_ = create;
     connect(create, &QPushButton::clicked, this, [this] {
-        Entity* e = ctx_.selected();
-        if (!e) return;
         ctx_.checkpoint();
         NodeGraph g;
         g.add("event.start", 40, 40);
         g.add("event.update", 40, 200);
-        e->graph = g;
+        ctx_.graph() = g;
         ctx_.changed();
         refresh();
         canvas_->frameAll();
@@ -561,29 +607,30 @@ NodesTab::NodesTab(EditorContext& ctx, QWidget* parent) : QWidget(parent), ctx_(
         canvas_->frameAll();
     });
     connect(&ctx_, &EditorContext::sceneChanged, this, [this] { refresh(); });
+    connect(&ctx_, &EditorContext::scenesChanged, this, [this] {
+        refresh();
+        canvas_->frameAll();
+    });
     refresh();
 }
 
 void NodesTab::refresh() {
-    Entity* e = ctx_.selected();
-    if (!e) {
-        title_->setText(tr("Nodes"));
-        empty_->setText(tr("Select an object to give it behavior with nodes."));
-        createButton_->hide();
-        stack_->setCurrentIndex(0);
-        return;
-    }
-    title_->setText(tr("Nodes  ·  %1").arg(QString::fromStdString(e->name)));
-    if (!e->graph) {
-        empty_->setText(tr("\"%1\" has no node graph yet.").arg(QString::fromStdString(e->name)));
-        createButton_->show();
+    const QString owner = QString::fromStdString(ctx_.behaviorOwner());
+    const bool scene = !ctx_.selected();
+    title_->setText(scene ? tr("Nodes  ·  %1 (the scene)").arg(owner) : tr("Nodes  ·  %1").arg(owner));
+    const std::optional<NodeGraph>& g = ctx_.graph();
+    if (!g) {
+        empty_->setText(scene ? tr("The scene \"%1\" has no node graph yet: its own rules (a score, a spawner) go there.\nOr select an object "
+                                   "in the Hierarchy to give it behavior.")
+                                    .arg(owner)
+                              : tr("\"%1\" has no node graph yet.").arg(owner));
         stack_->setCurrentIndex(0);
         return;
     }
     stack_->setCurrentIndex(1);
     canvas_->update();
     if (lua_->isVisible()) {
-        const CompiledGraph c = compileGraph(*e->graph);
+        const CompiledGraph c = compileGraph(*g);
         QString text = QString::fromStdString(c.lua);
         for (const std::string& w : c.warnings) text += "\n-- warning: " + QString::fromStdString(w);
         if (lua_->toPlainText() != text) lua_->setPlainText(text);

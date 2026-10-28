@@ -52,7 +52,8 @@ cmake --build build && ctest --test-dir build
 build/bin/artisan.exe
 ```
 
-SDL3, volk, Lua, nlohmann/json and stb are fetched by CMake at pinned versions.
+SDL3, volk, Lua, nlohmann/json, stb and (for the editor) Qt Advanced Docking System are
+fetched by CMake at pinned versions.
 
 **Linux** (Ubuntu 24.04): `sudo apt install cmake ninja-build qt6-base-dev libvulkan-dev glslc libx11-dev libxext-dev libwayland-dev libxkbcommon-dev`,
 then the same `cmake` commands. **macOS**: `brew install cmake ninja qt vulkan-headers vulkan-loader molten-vk shaderc`.

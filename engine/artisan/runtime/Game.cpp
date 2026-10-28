@@ -17,6 +17,16 @@ bool Game::load(FileReader read, std::string* error) {
         if (onLog) onLog(line);
     };
     lua.bind(&scene, &input);
+    // The scene's behavior first (no object: id 0), then the objects'.
+    if (scene.graph && !scene.graph->nodes.empty()) {
+        const CompiledGraph g = compileGraph(*scene.graph);
+        for (const std::string& w : g.warnings) lua.onLog("warning: " + scene.name + ": " + w);
+        lua.attach(0, g.lua, scene.name + " (nodes)");
+    }
+    if (!scene.script.empty()) {
+        if (std::vector<uint8_t> code; read_(scene.script, code)) lua.attach(0, std::string(code.begin(), code.end()), scene.script);
+        else lua.onLog("error: " + scene.name + ": cannot read " + scene.script);
+    }
     for (const Entity& e : scene.entities) {
         if (e.graph && !e.graph->nodes.empty()) {
             const CompiledGraph g = compileGraph(*e.graph);

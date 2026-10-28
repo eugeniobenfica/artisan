@@ -38,13 +38,22 @@ void loadSettings() {
     s.snapToGrid = j.value("snap_to_grid", s.snapToGrid);
     s.saveBeforePlay = j.value("save_before_play", s.saveBeforePlay);
     s.uiScale = std::clamp(j.value("ui_scale", s.uiScale), 0.8f, 1.6f);
+    s.customAccent = j.value("custom_accent", s.customAccent);
+    s.accent = j.value("accent", s.accent);
+    s.advanced = j.value("advanced", s.advanced);
+    if (auto it = j.find("closed_categories"); it != j.end() && it->is_array())
+        for (const json& c : *it)
+            if (c.is_string()) s.closedCategories.push_back(c.get<std::string>());
+    s.dockLayout = j.value("dock_layout", s.dockLayout);
 }
 
 void saveSettings() {
     const Settings& s = settings();
     const json j = {{"theme", s.theme},          {"custom_theme", s.customTheme}, {"projects_folder", s.projectsFolder},
                     {"recents", s.recents},      {"show_grid", s.showGrid},       {"grid_size", s.gridSize},
-                    {"snap_to_grid", s.snapToGrid}, {"save_before_play", s.saveBeforePlay}, {"ui_scale", s.uiScale}};
+                    {"snap_to_grid", s.snapToGrid}, {"save_before_play", s.saveBeforePlay}, {"ui_scale", s.uiScale},
+                    {"custom_accent", s.customAccent}, {"accent", s.accent}, {"advanced", s.advanced},
+                    {"closed_categories", s.closedCategories}, {"dock_layout", s.dockLayout}};
     platform::writeFile(file(), j.dump(2) + "\n");
 }
 

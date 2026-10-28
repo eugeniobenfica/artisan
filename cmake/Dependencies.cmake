@@ -4,6 +4,7 @@
 #   Vulkan headers  - the graphics API (the loader is opened at run time by volk, never linked)
 #   glslc           - compiles the GLSL shaders to SPIR-V at build time (shaderc)
 #   Qt 6            - the editor only (Widgets, Svg)
+#   Qt Advanced Docking System - the editor's panels, docked anywhere (fetched, as bemotion)
 #
 # Fetched at configure time and pinned to exact versions:
 #   SDL3            - the player's window, input, files and Android glue
@@ -91,4 +92,14 @@ endif()
 if(NOT ARTISAN_PLAYER_ONLY)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Svg)
     qt_standard_project_setup()
+
+    # --- Qt Advanced Docking System (the editor's panels, as in bemotion) ------------------
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_STATIC ON CACHE BOOL "" FORCE)
+    set(ADS_VERSION 5.1.1 CACHE STRING "" FORCE)
+    FetchContent_Declare(ads
+        GIT_REPOSITORY https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System.git
+        GIT_TAG        v5.1.1
+        GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(ads)
 endif()
