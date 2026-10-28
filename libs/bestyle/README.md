@@ -37,11 +37,12 @@ int main(int argc, char** argv) {
 | Header | What |
 | --- | --- |
 | `BeStyle.h` | `install`, `setTranslator` / `translate`, `Appearance` (the "look changed" signal); includes everything below |
-| `Theme.h` | `Palette` (dark, light, midnight, JSON in and out), the tokens `theme::kText`, `kAccent`, `kField`… and `theme::apply` |
+| `Theme.h` | `Palette` (dark, light, midnight, sunset, JSON in and out), the tokens `theme::kText`, `kAccent`, `kField`… and `theme::apply` |
 | `Style.h` | the `QProxyStyle`: Fusion with outlined check boxes and radio buttons, wheels that do not change unfocused fields |
 | `Draw.h` | a small drawing vocabulary over `QPainter` (`Rgba`, `Pt`, lines, rounded rects, arcs, text), always anti-aliased |
 | `Icons.h` | about 130 vector icons (`Icon`, `drawIcon`, `makeIcon`, `menuIcon`); no files to ship |
 | `Widgets.h` | `IconButton`, `Tile`, `DragValue`, `Switch`, `segmented`, `FlowLayout`, `ElidedLabel`, `ResponsiveGrid`, `LabeledRow`, `CategoryHeader` / `CategoryBody`, `ChoiceRow`, `setTone`, `sectionLabel`, `accentButton` |
+| `Pages.h` | `PagedWindow` (Settings, Help: pages listed on the left), `SettingsCard` and `addSection`, page titles and hints, `Swatch`, `ThemeCard`; not in `BeStyle.h`, include it where it is used |
 | `Metrics.h` | spacing and sizes (a 4 px step, panel margins, row and button heights) |
 
 ## Rules that keep it looking right

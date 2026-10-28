@@ -55,6 +55,7 @@ struct Palette {
 Palette darkPalette();
 Palette lightPalette();
 Palette midnightPalette();
+Palette sunsetPalette(); // warm dark reds, a coral accent
 
 bool paletteFromJson(const std::string& json, Palette& out, std::string* error = nullptr);
 std::string paletteToJson(const Palette& palette);
