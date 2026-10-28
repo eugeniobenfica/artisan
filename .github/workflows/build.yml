@@ -1,0 +1,96 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Every platform builds the engine, the player (the export template) and the editor, and runs
+# the engine tests. The players are uploaded as export templates (templates/<platform>/).
+jobs:
+  windows:
+    name: windows (MSYS2 UCRT64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-vulkan-headers mingw-w64-ucrt-x86_64-vulkan-loader mingw-w64-ucrt-x86_64-shaderc
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: template-windows
+          path: build/bin/artisan-player.exe
+
+  linux:
+    name: linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake qt6-base-dev libqt6svg6-dev libgl-dev libvulkan-dev glslc \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev \
+            libwayland-dev libxkbcommon-dev wayland-protocols libdecor-0-dev libegl-dev
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: template-linux
+          path: build/bin/artisan-player
+
+  macos:
+    name: macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: brew install ninja qt vulkan-headers vulkan-loader molten-vk shaderc
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt);$(brew --prefix vulkan-headers)"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: template-macos
+          path: build/bin/artisan-player
+
+  android:
+    name: android (player)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build the APK (the template, with an empty game)
+        working-directory: platforms/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: template-android-apk
+          path: platforms/android/app/build/outputs/apk/debug/*.apk

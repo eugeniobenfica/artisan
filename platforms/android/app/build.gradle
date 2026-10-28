@@ -1,0 +1,51 @@
+// An Artisan game for Android: SDL's activity, the Artisan player as libmain.so (built from the
+// engine's sources with CMake), and the game in assets/game. The editor's export fills in
+// artisan.properties (name, id, where the engine's sources are) and the assets.
+plugins {
+    id 'com.android.application'
+}
+
+def artisan = new Properties()
+def propsFile = rootProject.file('artisan.properties')
+if (propsFile.exists()) propsFile.withInputStream { artisan.load(it) }
+def engineDir = artisan.getProperty('artisan.engineDir', file('../../..').absolutePath)
+
+android {
+    namespace = 'org.artisan.game'
+    compileSdk 35
+    ndkVersion = '28.2.13676358'
+    defaultConfig {
+        applicationId artisan.getProperty('artisan.appId', 'org.artisan.game')
+        minSdk 24 // Vulkan
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+        resValue 'string', 'app_name', artisan.getProperty('artisan.appName', 'Artisan Game')
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_PLATFORM=android-24', '-DANDROID_STL=c++_static',
+                          '-DARTISAN_PLAYER_ONLY=ON', '-DARTISAN_BUILD_TESTS=OFF',
+                          "-DARTISAN_ENGINE_DIR=${engineDir}"
+                abiFilters 'arm64-v8a', 'x86_64'
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug // replace with your own key to publish
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path 'jni/CMakeLists.txt'
+            version '3.31.6'
+        }
+    }
+    applicationVariants.all { variant ->
+        tasks["merge${variant.name.capitalize()}Assets"].dependsOn("externalNativeBuild${variant.name.capitalize()}")
+    }
+    lint {
+        abortOnError = false
+    }
+}

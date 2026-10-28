@@ -1,0 +1,27 @@
+# Build output
+build/
+build-*/
+out/
+cmake-build-*/
+.cxx/
+.gradle/
+platforms/android/app/build/
+platforms/android/local.properties
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Temporary saves
+*.tmp
+
+# Export templates and packages made locally
+templates/
+dist/
