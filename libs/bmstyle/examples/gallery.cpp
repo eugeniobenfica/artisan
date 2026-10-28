@@ -1,7 +1,7 @@
-// bmstyle's gallery: every control in one window, and a theme switch. Also the shortest example
-// of an app using the library (build with -DBMSTYLE_BUILD_EXAMPLES=ON).
+// bestyle's gallery: every control in one window, and a theme switch. Also the shortest example
+// of an app using the library (build with -DBESTYLE_BUILD_EXAMPLES=ON).
 
-#include "bmstyle/BmStyle.h"
+#include "bestyle/BeStyle.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -12,9 +12,9 @@
 
 namespace {
 
-using namespace bmstyle;
+using namespace bestyle;
 
-// A custom-drawn widget: bmstyle::Draw and the theme's tokens, read when painting.
+// A custom-drawn widget: bestyle::Draw and the theme's tokens, read when painting.
 class Swatches : public QWidget {
 public:
     Swatches() {
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     install(theme::darkPalette());
 
     QWidget window;
-    window.setWindowTitle("bmstyle gallery");
+    window.setWindowTitle("bestyle gallery");
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);

@@ -1,10 +1,10 @@
 #pragma once
 
-// The sizes bmstyle's layouts use, so every panel spaces the same way: a 4 px step, gutters,
+// The sizes bestyle's layouts use, so every panel spaces the same way: a 4 px step, gutters,
 // control heights. Rounding, border width and dialog control height come from the theme
 // (theme::current()), since users change them.
 
-namespace bmstyle::metrics {
+namespace bestyle::metrics {
 
 constexpr int kStep = 4;            // the base unit: every gap is a multiple
 constexpr int kGap = kStep;         // between rows of a form, controls in a row
@@ -17,4 +17,4 @@ constexpr int kHeaderHeight = 30;   // category and section headings
 constexpr int kLabelMin = 60;       // labels shorten (…) below this width
 constexpr int kTileRadius = 8;      // tiles and cards
 
-} // namespace bmstyle::metrics
+} // namespace bestyle::metrics

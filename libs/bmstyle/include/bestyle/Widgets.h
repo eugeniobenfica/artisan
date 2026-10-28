@@ -1,12 +1,12 @@
 #pragma once
 
-// The controls bmstyle apps share, drawn with the theme's tokens at paint time (so a theme
+// The controls bestyle apps share, drawn with the theme's tokens at paint time (so a theme
 // change shows at once): toned labels, icon buttons and tiles, the After Effects-like number
 // field, switches, segmented choices, layouts that reflow in narrow panels, and the category
-// headings of libraries. Their text goes through bmstyle::translate.
+// headings of libraries. Their text goes through bestyle::translate.
 
-#include "bmstyle/Draw.h"
-#include "bmstyle/Icons.h"
+#include "bestyle/Draw.h"
+#include "bestyle/Icons.h"
 
 #include <QAbstractButton>
 #include <QLabel>
@@ -22,7 +22,7 @@
 class QLineEdit;
 class QMimeData;
 
-namespace bmstyle {
+namespace bestyle {
 
 // Text colors that follow the theme: setTone colors a label (or any widget's text) with one of
 // the theme's roles, and recolors it whenever the appearance changes.
@@ -316,4 +316,4 @@ private:
     int controlMin_;
 };
 
-} // namespace bmstyle
+} // namespace bestyle

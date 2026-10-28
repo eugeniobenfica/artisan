@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <string>
 
-namespace bmstyle {
+namespace bestyle {
 
 // A color packed as 0xAABBGGRR (red in the low byte).
 using Rgba = uint32_t;
@@ -74,4 +74,4 @@ private:
     QPainter& p_;
 };
 
-} // namespace bmstyle
+} // namespace bestyle

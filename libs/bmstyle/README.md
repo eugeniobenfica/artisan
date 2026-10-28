@@ -1,4 +1,4 @@
-# bmstyle
+# bestyle
 
 bemotion's look as a library for any Qt 6 Widgets app in C++: the theme
 (palettes and color tokens), the widget style, a vector icon set and the
@@ -10,33 +10,33 @@ of bemotion.
 ## Use it
 
 ```cmake
-add_subdirectory(path/to/bmstyle)
-target_link_libraries(my_app PRIVATE bmstyle)
+add_subdirectory(path/to/bestyle)
+target_link_libraries(my_app PRIVATE bestyle)
 ```
 
 ```cpp
-#include "bmstyle/BmStyle.h"
+#include "bestyle/BeStyle.h"
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
-    bmstyle::install(bmstyle::theme::darkPalette()); // style + palette, once
+    bestyle::install(bestyle::theme::darkPalette()); // style + palette, once
 
-    auto* opacity = new bmstyle::DragValue;           // drag to scrub, click to type
+    auto* opacity = new bestyle::DragValue;           // drag to scrub, click to type
     opacity->setRange(0, 100);
     opacity->setFormat("%.0f%%");
-    auto* row = new bmstyle::LabeledRow("Opacity", opacity);
+    auto* row = new bestyle::LabeledRow("Opacity", opacity);
     // ...
 }
 ```
 
 `examples/gallery.cpp` shows every control and switches themes while it runs
-(`-DBMSTYLE_BUILD_EXAMPLES=ON`).
+(`-DBESTYLE_BUILD_EXAMPLES=ON`).
 
 ## What is in it
 
 | Header | What |
 | --- | --- |
-| `BmStyle.h` | `install`, `setTranslator` / `translate`, `Appearance` (the "look changed" signal); includes everything below |
+| `BeStyle.h` | `install`, `setTranslator` / `translate`, `Appearance` (the "look changed" signal); includes everything below |
 | `Theme.h` | `Palette` (dark, light, midnight, JSON in and out), the tokens `theme::kText`, `kAccent`, `kField`… and `theme::apply` |
 | `Style.h` | the `QProxyStyle`: Fusion with outlined check boxes and radio buttons, wheels that do not change unfocused fields |
 | `Draw.h` | a small drawing vocabulary over `QPainter` (`Rgba`, `Pt`, lines, rounded rects, arcs, text), always anti-aliased |
@@ -60,8 +60,8 @@ int main(int argc, char** argv) {
 
 ## Shared between projects
 
-bmstyle lives in [bestyle](https://github.com/eugeniobenfica/bestyle) and each
-app (bemotion, Artisan…) carries it as a git subtree in `libs/bmstyle`: the code
+bestyle lives in [its own repository](https://github.com/eugeniobenfica/bestyle) and each
+app (bemotion, Artisan…) carries it as a git subtree in `libs/bestyle`: the code
 is in the app's repository, so building needs nothing extra. Change it in any
 app, commit, then `tools/bestyle.sh push`; in the other apps
 `tools/bestyle.sh pull`. `tools/bestyle.sh status` shows what differs.
@@ -69,7 +69,7 @@ app, commit, then `tools/bestyle.sh push`; in the other apps
 A new app takes it with
 
 ```bash
-git subtree add --prefix libs/bmstyle https://github.com/eugeniobenfica/bestyle.git main --squash
+git subtree add --prefix libs/bestyle https://github.com/eugeniobenfica/bestyle.git main --squash
 ```
 
 and copies `tools/bestyle.sh` from one of the others.

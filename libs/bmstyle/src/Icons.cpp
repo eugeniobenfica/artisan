@@ -1,6 +1,6 @@
-#include "bmstyle/Icons.h"
+#include "bestyle/Icons.h"
 
-#include "bmstyle/Theme.h"
+#include "bestyle/Theme.h"
 
 #include <QPainter>
 #include <QPixmap>
@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace bmstyle {
+namespace bestyle {
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
@@ -857,4 +857,4 @@ QIcon menuIcon(Icon icon, Rgba color) {
     return QIcon(pm);
 }
 
-} // namespace bmstyle
+} // namespace bestyle

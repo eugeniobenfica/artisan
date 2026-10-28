@@ -1,8 +1,8 @@
-#include "bmstyle/BmStyle.h"
+#include "bestyle/BeStyle.h"
 
 #include <QApplication>
 
-namespace bmstyle {
+namespace bestyle {
 
 namespace {
 std::function<QString(const QString&)>& translator() {
@@ -25,4 +25,4 @@ Appearance& Appearance::get() {
     return a;
 }
 
-} // namespace bmstyle
+} // namespace bestyle

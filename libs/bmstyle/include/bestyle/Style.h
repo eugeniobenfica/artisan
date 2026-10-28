@@ -6,7 +6,7 @@
 
 #include <QProxyStyle>
 
-namespace bmstyle {
+namespace bestyle {
 
 class Style : public QProxyStyle {
 public:
@@ -20,4 +20,4 @@ public:
     int pixelMetric(PixelMetric metric, const QStyleOption* option = nullptr, const QWidget* widget = nullptr) const override;
 };
 
-} // namespace bmstyle
+} // namespace bestyle

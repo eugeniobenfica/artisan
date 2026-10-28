@@ -1,4 +1,4 @@
-#include "bmstyle/Draw.h"
+#include "bestyle/Draw.h"
 
 #include <QFontMetricsF>
 #include <QPainterPath>
@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-namespace bmstyle {
+namespace bestyle {
 
 namespace {
 
@@ -132,4 +132,4 @@ void Draw::pushClip(Pt a, Pt b) {
     p_.setClipRect(rectOf(a, b), Qt::IntersectClip);
 }
 
-} // namespace bmstyle
+} // namespace bestyle

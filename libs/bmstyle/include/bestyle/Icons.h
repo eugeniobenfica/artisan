@@ -1,15 +1,15 @@
 #pragma once
 
-// The vector icon set, drawn with bmstyle::Draw (no icon font or pictures to ship): any size,
+// The vector icon set, drawn with bestyle::Draw (no icon font or pictures to ship): any size,
 // any color, sharp on every screen.
 
-#include "bmstyle/Draw.h"
+#include "bestyle/Draw.h"
 
 #include <QIcon>
 
 #include <functional>
 
-namespace bmstyle {
+namespace bestyle {
 
 enum class Icon {
     Text,
@@ -151,4 +151,4 @@ QIcon menuIcon(Icon icon, Rgba color);                 // fills a menu's icon co
 // Icon::Logo is the app's own mark: how to paint it (a disc of `radius` around `center`).
 void setLogoPainter(std::function<void(QPainter& p, Pt center, float radius, Rgba color)> paint);
 
-} // namespace bmstyle
+} // namespace bestyle

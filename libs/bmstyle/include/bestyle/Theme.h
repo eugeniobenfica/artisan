@@ -5,14 +5,14 @@
 // The tokens below (kText, kAccent...) are read at paint time, never baked into
 // a style sheet: themes change while the app runs.
 
-#include "bmstyle/Draw.h"
+#include "bestyle/Draw.h"
 
 #include <string>
 
-namespace bmstyle::theme {
+namespace bestyle::theme {
 
-using bmstyle::Rgba;
-using bmstyle::rgba;
+using bestyle::Rgba;
+using bestyle::rgba;
 
 // A complete UI color scheme. Themes are plain JSON (see paletteToJson), so
 // users can share and import them. The colors after `canvas` are optional: 0 means "worked
@@ -70,7 +70,7 @@ inline Rgba kDanger, kSnap, kGuide, kCanvas;
 inline Rgba kHeader, kField, kFieldBorder, kButton, kButtonBorder, kFocus, kSelection, kMenu;
 inline Rgba kSuccess, kWarning, kPlayhead, kKeyframe;
 
-inline QColor q(Rgba c) { return bmstyle::qcolor(c); }
+inline QColor q(Rgba c) { return bestyle::qcolor(c); }
 Rgba withAlpha(Rgba c, int alpha);
 Rgba mix(Rgba a, Rgba b, float t);
 Rgba accent(int alpha); // the accent color at the given alpha
@@ -82,10 +82,10 @@ const Palette& current();
 Palette resolved(const Palette& palette);
 
 // Colors and rounding for the whole application (Qt palette and style sheet); toned labels and
-// everything listening to bmstyle::Appearance follow.
+// everything listening to bestyle::Appearance follow.
 void apply(const Palette& palette);
 // Extra rules for Qt Advanced Docking System's own style sheet (panels, their tabs and title
 // bars), for an app that docks its panels with it.
 QString dockStyleSheet();
 
-} // namespace bmstyle::theme
+} // namespace bestyle::theme

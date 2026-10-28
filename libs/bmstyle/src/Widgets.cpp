@@ -1,7 +1,7 @@
-#include "bmstyle/Widgets.h"
+#include "bestyle/Widgets.h"
 
-#include "bmstyle/BmStyle.h"
-#include "bmstyle/Theme.h"
+#include "bestyle/BeStyle.h"
+#include "bestyle/Theme.h"
 
 #include <QApplication>
 #include <QButtonGroup>
@@ -21,7 +21,7 @@
 #include <cmath>
 #include <cstdio>
 
-namespace bmstyle {
+namespace bestyle {
 
 namespace {
 
@@ -38,7 +38,7 @@ Rgba toneColor(Tone t) {
 }
 
 void applyTone(QWidget* w) {
-    const QVariant v = w->property("bmstyleTone");
+    const QVariant v = w->property("bestyleTone");
     if (v.isValid()) w->setStyleSheet(QString("color: %1;").arg(theme::q(toneColor(static_cast<Tone>(v.toInt()))).name()));
 }
 
@@ -52,7 +52,7 @@ void setTone(QWidget* widget, Tone tone) {
             for (QWidget* w : QApplication::allWidgets()) applyTone(w);
         });
     }
-    widget->setProperty("bmstyleTone", static_cast<int>(tone));
+    widget->setProperty("bestyleTone", static_cast<int>(tone));
     applyTone(widget);
 }
 
@@ -611,4 +611,4 @@ void LabeledRow::place() {
     }
 }
 
-} // namespace bmstyle
+} // namespace bestyle
