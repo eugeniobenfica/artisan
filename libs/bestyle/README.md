@@ -41,8 +41,8 @@ int main(int argc, char** argv) {
 | `Style.h` | the `QProxyStyle`: Fusion with outlined check boxes and radio buttons, wheels that do not change unfocused fields |
 | `Draw.h` | a small drawing vocabulary over `QPainter` (`Rgba`, `Pt`, lines, rounded rects, arcs, text), always anti-aliased |
 | `Icons.h` | about 130 vector icons (`Icon`, `drawIcon`, `makeIcon`, `menuIcon`); no files to ship |
-| `Widgets.h` | `IconButton`, `Tile`, `DragValue`, `Switch`, `segmented`, `FlowLayout`, `ElidedLabel`, `ResponsiveGrid`, `LabeledRow`, `CategoryHeader` / `CategoryBody`, `ChoiceRow`, `setTone`, `sectionLabel`, `accentButton` |
-| `Pages.h` | `PagedWindow` (Settings, Help: pages listed on the left), `SettingsCard` and `addSection`, page titles and hints, `Swatch`, `ThemeCard`; not in `BeStyle.h`, include it where it is used |
+| `Widgets.h` | `IconButton`, `Tile`, `EdgeTab` (a minimized panel's tab), `DragValue`, `Switch`, `segmented`, `FlowLayout`, `ElidedLabel`, `ResponsiveGrid`, `LabeledRow`, `CategoryHeader` / `CategoryBody`, `ChoiceRow`, `setTone`, `sectionLabel`, `accentButton` |
+| `Pages.h` | `PagedWindow` (Settings, Help: pages listed on the left), `SettingsCard` and `addSection` (rows with a radio button or check box click as a whole), page titles and hints, `sliderControl`, `KeyCaps`, `ShortcutEdit`, `Chip`, `IconTile`, `Swatch`, `ThemeCard`; not in `BeStyle.h`, include it where it is used |
 | `Metrics.h` | spacing and sizes (a 4 px step, panel margins, row and button heights) |
 
 ## Rules that keep it looking right
