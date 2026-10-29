@@ -1,5 +1,6 @@
 #include "ui/Navigator.h"
 
+#include "app/Settings.h"
 #include "ui/EditorContext.h"
 #include "ui/Widgets.h"
 
@@ -104,6 +105,7 @@ void Navigator::rebuildTabs() {
 void Navigator::updatePath() {
     backButton_->setEnabled(ctx_.canGoBack());
     forwardButton_->setEnabled(ctx_.canGoForward());
+    path_->setVisible(settings().showPath);
     if (ctx_.dir.empty()) return path_->clear();
     const QString faint = theme::q(theme::kTextFaint).name(), dim = theme::q(theme::kTextDim).name(), text = theme::q(theme::kText).name();
     const QString sep = QString("<span style='color:%1'>&nbsp;›&nbsp;</span>").arg(faint);

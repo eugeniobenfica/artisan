@@ -26,6 +26,7 @@ public:
 
     std::function<void(const std::filesystem::path&)> onOpen;
     std::function<void()> onSettings;
+    std::function<void()> onHelp;
 
     void refresh(); // when the screen shows
     void rebuild(); // after a theme change

@@ -64,7 +64,7 @@ public:
     explicit Compiler(const NodeGraph& g) : g_(g) {}
 
     CompiledGraph run() {
-        std::string start, update;
+        std::string start, update, hit;
         for (const Node& n : g_.nodes) {
             const NodeDef* def = findNodeDef(n.type);
             if (!def) {
@@ -74,11 +74,12 @@ public:
             if (def->kind != NodeDef::Kind::Event) continue;
             visiting_.clear();
             std::string code = statements(n, *def);
-            (def->event == "start" ? start : update) += code;
+            (def->event == "start" ? start : def->event == "hit" ? hit : update) += code;
         }
         out_.lua = "-- Generated from a node graph: edit the graph, not this code.\n";
         if (!start.empty()) out_.lua += "function start(self)\n" + indent(start) + "end\n";
         if (!update.empty()) out_.lua += "function update(self, dt)\n" + indent(update) + "end\n";
+        if (!hit.empty()) out_.lua += "function hit(self, other)\n" + indent(hit) + "end\n";
         return std::move(out_);
     }
 
@@ -88,6 +89,10 @@ private:
         c.uid = "n" + std::to_string(n.id);
         c.input = [this, &n, &def](const std::string& pin) { return input(n, def, pin); };
         c.exec = [this, &n](const std::string& pin) { return follow(n, pin); };
+        c.value = [&n](const std::string& name) {
+            auto it = n.values.find(name);
+            return it != n.values.end() ? it->second : std::string();
+        };
         return c;
     }
 

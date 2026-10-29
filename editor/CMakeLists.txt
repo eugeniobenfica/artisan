@@ -10,6 +10,10 @@ add_executable(artisan WIN32
     app/ProjectIO.cpp
     app/Exporter.h
     app/Exporter.cpp
+    app/Shortcuts.h
+    app/Shortcuts.cpp
+    app/Plugins.h
+    app/Plugins.cpp
     ui/EditorContext.h
     ui/EditorContext.cpp
     ui/Widgets.h

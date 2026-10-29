@@ -6,6 +6,7 @@
 
 #include "app/Exporter.h"
 #include "app/Platform.h"
+#include "app/Plugins.h"
 #include "app/ProjectIO.h"
 #include "app/Settings.h"
 #include "artisan/core/Project.h"
@@ -37,7 +38,7 @@ QIcon appIcon() {
         QPixmap px(size, size);
         px.fill(Qt::transparent);
         QPainter p(&px);
-        ui::drawLogoMark(p, {size * 0.5f, size * 0.5f}, size * 0.48f, bestyle::rgba(232, 185, 49));
+        ui::drawAppIcon(p, static_cast<float>(size));
         icon.addPixmap(px);
     }
     return icon;
@@ -90,6 +91,7 @@ int main(int argc, char** argv) {
     bestyle::setLogoPainter(ui::drawLogoMark);
     ui::installWindowChrome();
     applyTheme();
+    PluginHost::get().load();
 
 #if QT_CONFIG(vulkan)
     // One Vulkan instance for the editor's views (the player makes its own).

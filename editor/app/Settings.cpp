@@ -45,6 +45,18 @@ void loadSettings() {
         for (const json& c : *it)
             if (c.is_string()) s.closedCategories.push_back(c.get<std::string>());
     s.dockLayout = j.value("dock_layout", s.dockLayout);
+    s.autosave = j.value("autosave", s.autosave);
+    s.uiFont = j.value("ui_font", s.uiFont);
+    s.nodeScale = std::clamp(j.value("node_scale", s.nodeScale), 0.7f, 1.5f);
+    s.showPath = j.value("show_path", s.showPath);
+    s.showLua = j.value("show_lua", s.showLua);
+    s.nodeGrid = j.value("node_grid", s.nodeGrid);
+    if (auto it = j.find("shortcuts"); it != j.end() && it->is_object())
+        for (const auto& [id, keys] : it->items())
+            if (keys.is_string()) s.shortcuts[id] = keys.get<std::string>();
+    if (auto it = j.find("disabled_plugins"); it != j.end() && it->is_array())
+        for (const json& p : *it)
+            if (p.is_string()) s.disabledPlugins.push_back(p.get<std::string>());
 }
 
 void saveSettings() {
@@ -53,7 +65,9 @@ void saveSettings() {
                     {"recents", s.recents},      {"show_grid", s.showGrid},       {"grid_size", s.gridSize},
                     {"snap_to_grid", s.snapToGrid}, {"save_before_play", s.saveBeforePlay}, {"ui_scale", s.uiScale},
                     {"custom_accent", s.customAccent}, {"accent", s.accent}, {"advanced", s.advanced},
-                    {"closed_categories", s.closedCategories}, {"dock_layout", s.dockLayout}};
+                    {"closed_categories", s.closedCategories}, {"dock_layout", s.dockLayout}, {"autosave", s.autosave},
+                    {"ui_font", s.uiFont}, {"node_scale", s.nodeScale}, {"show_path", s.showPath}, {"show_lua", s.showLua},
+                    {"node_grid", s.nodeGrid}, {"shortcuts", s.shortcuts}, {"disabled_plugins", s.disabledPlugins}};
     platform::writeFile(file(), j.dump(2) + "\n");
 }
 

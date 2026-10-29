@@ -137,6 +137,42 @@ std::vector<NodeDef> build() {
                          [](const Ctx& c) { return "vars[" + c.input("name") + "] = " + c.input("value") + "\n"; }));
     lib.back().category = "Variables";
 
+    // --- collision: hitboxes -------------------------------------------------------------------
+    {
+        NodeDef d;
+        d.type = "event.hit";
+        d.title = "On Hit";
+        d.category = "Collision";
+        d.kind = Kind::Event;
+        d.event = "hit";
+        d.inputs = {text("with")}; // only that object (by name); empty: any
+        d.outputs = {execOut(), text("other")};
+        d.statements = [](const Ctx& c) {
+            return "if " + c.input("with") + " == \"\" or other.name == " + c.input("with") + " then\n" + c.exec("then") + "end\n";
+        };
+        d.expression = [](const Ctx&, const std::string&) { return std::string("other.name"); };
+        lib.push_back(d);
+    }
+    lib.push_back(pure("hitbox.touching", "Is Touching", "Collision", {text("name")}, {boolean("touching")},
+                       [](const Ctx& c, const std::string&) { return "self:touching(" + c.input("name") + ")"; }));
+
+    // --- script: Lua typed into the graph ------------------------------------------------------
+    {
+        // Its code runs as a function of `a` and `b` (with `self`, `dt` and the whole API in
+        // reach); what it returns comes out of `result`. It is code the user wrote, on purpose:
+        // the one node whose text is not a literal.
+        NodeDef d = action("script.lua", "Lua Code", {any("a"), any("b")}, [](const Ctx& c) {
+            std::string code = c.value("code");
+            if (!code.empty() && code.back() != '\n') code += "\n";
+            return "local " + c.uid + "_result = (function(a, b)\n" + code + "end)(" + c.input("a") + ", " + c.input("b") + ")\n";
+        });
+        d.category = "Script";
+        d.hasCode = true;
+        d.outputs.push_back(any("result"));
+        d.expression = [](const Ctx& c, const std::string&) { return c.uid + "_result"; };
+        lib.push_back(d);
+    }
+
     // --- values ------------------------------------------------------------------------------
     const PinDef result{"result", PinType::Number, ""};
     lib.push_back(pure("value.number", "Number", "Values", {num("value")}, {num("value")},

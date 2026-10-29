@@ -21,10 +21,14 @@ namespace artisan::editor::ui {
 using namespace bestyle;
 namespace theme = bestyle::theme;
 
-// The Artisan mark: a flat triangle opened into an "A", as bestyle's Icon::Logo. Always in the
-// brand's gold, whatever the theme's accent.
+// The Artisan mark: a flat triangle opened into an "A", lit from its peak, as bestyle's Icon::Logo.
+// Always in the brand's teal (a green-leaning cyan), whatever the theme's accent.
 void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color);
-inline constexpr Rgba kLogoGold = rgba(232, 185, 49);
+inline constexpr Rgba kLogoCyan = rgba(32, 212, 176);
+// The application's icon: the mark on a dark rounded square, `size` pixels wide.
+void drawAppIcon(QPainter& p, float size);
+// A plugin's icon by its name ("star", "magnet"...; docs/PLUGINS.md lists them).
+Icon pluginIcon(const std::string& name);
 
 class LogoMark : public QWidget {
 public:

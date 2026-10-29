@@ -13,6 +13,9 @@ end
 
 function update(self, dt)   -- every frame; dt is the frame's duration in seconds
 end
+
+function hit(self, other)   -- its hitbox started to touch another one (other: that object)
+end
 ```
 
 ## The object: `self`
@@ -28,7 +31,25 @@ end
 | `self:set_color(r, g, b, a)` | the shape's color or the sprite's tint (0 to 1) |
 | `self:find(name)` | another object by name, or `nil` |
 | `self:destroy()` | removes the object at the end of the frame |
+| `self:touching([name])` | its hitbox touches another (or the one with that name, or an object) |
 | `vars` | a table of the object's own variables (the nodes' variables live there too) |
+
+## Hitboxes
+
+An object with a **Hitbox** (Inspector › Add Component) collides: an upright box around
+its position (plus an offset), scaled with it. A **solid** hitbox (walls, floors,
+platforms) stops the others: after each frame's scripts, every hitbox that is not solid
+is pushed out of the solid ones the shortest way, so a player moved into a wall stays
+against it. When two hitboxes start to touch, `hit(self, other)` runs on both objects
+(once, not every frame they stay together); `self:touching()` says whether they touch
+now. The Player and Platform in the library have one already; the viewport draws them
+(green, orange when solid).
+
+```lua
+function hit(self, other)
+    if other.name == "Coin" then other:destroy() end
+end
+```
 
 ## The scene's own behavior
 
@@ -77,13 +98,24 @@ at an event.
 | Logic | Greater, Less, Equal, And, Or, Not |
 | Values | Number, Text |
 | Variables | Set Variable, Get Variable |
+| Collision | On Hit (an object's hitbox starts to touch another; `with` limits it to one name), Is Touching |
+| Script | Lua Code |
 
-In the Nodes tab the library on the left lists every node by category: click one to add
-it in the middle of the view, or drag it where it goes. In the canvas: right-click or
-double-click empty space to add a node; drag from a pin
-to wire it (drop on empty space to add a node already wired); Alt+click a pin to cut its
-wires; click a value to type it; Delete removes the selected node; F frames all.
-The ƒ button shows the Lua the graph becomes.
+**Lua Code** is the node for what no other node does: double-click it and write Lua. It
+runs when the execution wire reaches it, as a function of its inputs `a` and `b`, with
+`self`, `dt` (in On Update) and the whole API in reach; what it returns comes out of
+`result`. Its text is the one value in a graph that is code, on purpose.
+
+In the Nodes tab the library on the left lists presets (WASD movement, arrow keys, camera
+follow, spin, float, Lua code on update: nodes already wired) and every node by category:
+click one to add it, or drag it where it goes (it shows where it will land while dragged);
+a preset added while the scene is selected comes with a new object to move.
+In the canvas: right-click or double-click empty space to add a node or a preset; drag on
+empty space to select several (Shift or Ctrl adds), drag one to move them all; drag from a
+pin to wire it (drop on empty space to add a node already wired); Alt+click a pin to cut
+its wires; click a value to type it; Ctrl+D duplicates, Delete removes the selection; F
+frames all. The ƒ button shows the Lua the graph becomes. Settings › Interface sets the
+nodes' size.
 
 A new node is one entry in `engine/artisan/nodes/NodeLibrary.cpp`: its pins and the Lua
 it emits. Values typed into pins are always emitted as literals of the pin's type, never

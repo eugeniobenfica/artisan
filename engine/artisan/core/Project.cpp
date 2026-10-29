@@ -99,6 +99,7 @@ json entityToJson(const Entity& e) {
     if (e.sprite)
         j["sprite"] = {{"image", e.sprite->image}, {"size", vec(e.sprite->size)}, {"tint", hex(e.sprite->tint)}, {"lit", e.sprite->lit}};
     if (e.light) j["light"] = {{"color", hex(e.light->color)}, {"radius", e.light->radius}, {"intensity", e.light->intensity}};
+    if (e.hitbox) j["hitbox"] = {{"size", vec(e.hitbox->size)}, {"offset", vec(e.hitbox->offset)}, {"solid", e.hitbox->solid}};
     if (!e.script.empty()) j["script"] = e.script;
     if (e.graph) j["graph"] = graphToJson(*e.graph);
     return j;
@@ -141,6 +142,13 @@ Entity entityFromJson(const json& j) {
         l.radius = get(*it, "radius", l.radius);
         l.intensity = get(*it, "intensity", l.intensity);
         e.light = l;
+    }
+    if (auto it = j.find("hitbox"); it != j.end() && it->is_object()) {
+        Hitbox h;
+        h.size = vec(it->value("size", json()), h.size);
+        h.offset = vec(it->value("offset", json()), h.offset);
+        h.solid = get(*it, "solid", h.solid);
+        e.hitbox = h;
     }
     e.script = get(j, "script", std::string());
     if (auto it = j.find("graph"); it != j.end() && it->is_object()) e.graph = graphFromJson(*it);
@@ -285,13 +293,13 @@ Project starterProject(const std::string& name, int width, int height) {
     spinner.position = {0, 220};
     spinner.shape = Shape{ShapeKind::RoundedRectangle, {120, 120}, Color::rgb(0xB48CFF), 22.0f, 3.0f, Color::rgb(0xFFFFFF, 0.6f), 18.0f, true};
     NodeGraph g;
-    Node& ev = g.add("event.update", 40, 60);
-    Node& rot = g.add("action.rotate", 300, 60);
-    Node& mul = g.add("math.multiply", 60, 200);
-    mul.values["b"] = "90";
-    g.connect({ev.id, "then", rot.id, "in"});
-    g.connect({ev.id, "dt", mul.id, "a"});
-    g.connect({mul.id, "result", rot.id, "degrees"});
+    const NodeId ev = g.add("event.update", 40, 60).id;
+    const NodeId rot = g.add("action.rotate", 300, 60).id;
+    const NodeId mul = g.add("math.multiply", 60, 200).id;
+    g.find(mul)->values["b"] = "90";
+    g.connect({ev, "then", rot, "in"});
+    g.connect({ev, "dt", mul, "a"});
+    g.connect({mul, "result", rot, "degrees"});
     spinner.graph = g;
     s.add(spinner);
 

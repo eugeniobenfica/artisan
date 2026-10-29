@@ -36,6 +36,7 @@ struct NodeGraph {
     Node* find(NodeId id);
     const Node* find(NodeId id) const;
     NodeId nextId() const;
+    // The node added. The reference lasts until the next add (the nodes may move): keep its id.
     Node& add(const std::string& type, float x, float y);
     void remove(NodeId id); // and its links
     // The link into an input (inputs take one link), if any.

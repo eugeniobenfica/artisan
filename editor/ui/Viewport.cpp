@@ -26,6 +26,7 @@ class QVulkanInstance;
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <optional>
 
 namespace artisan::editor {
 
@@ -80,6 +81,7 @@ public:
     Vec2 center;
     float zoom = 0.5f;
     bool fitted = false;
+    std::optional<Entity> ghost; // an object being dragged in from the library, where it would land
     std::function<void()> onViewChanged;
 
     Vec2 toWorld(QPointF p) const { return center + Vec2(static_cast<float>(p.x() - width() / 2.0), static_cast<float>(p.y() - height() / 2.0)) / zoom; }
@@ -216,7 +218,8 @@ void SceneRenderer::startNextFrame() {
     const QSize size = w_->swapChainImageSize();
     const Scene& scene = ctx_.scene();
     VkClearValue clear[3]{};
-    const Color bg = scene.background;
+    // Around the game's frame the theme's canvas color; inside it, the scene's background.
+    const Color bg = fromRgba(theme::kCanvas);
     clear[0].color = {{bg.r, bg.g, bg.b, 1.0f}};
     clear[1].depthStencil = {1.0f, 0};
     clear[2].color = clear[0].color;
@@ -233,7 +236,20 @@ void SceneRenderer::startNextFrame() {
         const View view{w_->center, w_->zoom * dpr, {static_cast<float>(size.width()), static_cast<float>(size.height())}};
         const auto dir = ctx_.dir;
         r_.begin(static_cast<uint32_t>(w_->currentFrame()));
-        drawScene(r_, scene, view, [dir](const std::string& path, std::vector<uint8_t>& out) {
+        const Project& p = ctx_.project;
+        const Vec2 frame = Vec2(static_cast<float>(p.window.width), static_cast<float>(p.window.height)) / std::max(scene.camera.zoom, 0.01f);
+        r_.draw(overlay(scene.camera.position, frame, 0, QuadShape::Rectangle, scene.background, 0, {}), INT32_MIN + 1);
+        // A copy with the dragged object in it, see-through, while something is dragged in.
+        Scene withGhost;
+        if (w_->ghost) {
+            withGhost = scene;
+            Entity g = *w_->ghost;
+            if (g.shape) g.shape->color.a *= 0.6f;
+            if (g.sprite) g.sprite->tint.a *= 0.6f;
+            g.layer = std::max(g.layer, 1000);
+            withGhost.entities.push_back(g);
+        }
+        drawScene(r_, w_->ghost ? withGhost : scene, view, [dir](const std::string& path, std::vector<uint8_t>& out) {
             std::ifstream in(dir / platform::fromUtf8(path), std::ios::binary);
             if (!in) return false;
             out.assign(std::istreambuf_iterator<char>(in), {});
@@ -252,8 +268,6 @@ void SceneRenderer::startNextFrame() {
             r_.draw(g, kOverlay - 2);
         }
         // The game's frame: what the camera shows at the design resolution.
-        const Project& p = ctx_.project;
-        const Vec2 frame = Vec2(static_cast<float>(p.window.width), static_cast<float>(p.window.height)) / std::max(scene.camera.zoom, 0.01f);
         r_.draw(overlay(scene.camera.position, frame, 0, QuadShape::Rectangle, {0, 0, 0, 0}, 1.5f * px, fromRgba(theme::ink(110))), kOverlay - 1);
 
         for (const Entity& e : scene.entities) {
@@ -265,11 +279,23 @@ void SceneRenderer::startNextFrame() {
             } else if (!e.shape && !e.sprite) {
                 r_.draw(overlay(e.position, Vec2(16, 16) * px, radians(45), QuadShape::Rectangle, {0, 0, 0, 0}, 2.0f * px, fromRgba(theme::ink(160))), kOverlay);
             }
-            if (sel && (e.shape || e.sprite)) {
+            // Hitboxes: a thin box, orange for a solid one, green for the others; brighter selected.
+            if (const auto box = hitboxOf(e)) {
+                const Color c = e.hitbox->solid ? Color{1.0f, 0.62f, 0.25f, sel ? 1.0f : 0.55f} : Color{0.36f, 0.85f, 0.45f, sel ? 1.0f : 0.55f};
+                r_.draw(overlay((box->min + box->max) * 0.5f, box->max - box->min, 0, QuadShape::Rectangle, {c.r, c.g, c.b, sel ? 0.10f : 0.04f},
+                                (sel ? 1.5f : 1.0f) * px, c),
+                        kOverlay);
+            }
+            if (sel && (e.shape || e.sprite) && !w_->ghost) {
                 const Vec2 s = entitySize(e) + Vec2(6, 6) * px;
                 r_.draw(overlay(e.position, s, radians(e.rotation), QuadShape::Rectangle, {0, 0, 0, 0}, 1.5f * px, accent), kOverlay + 1);
                 r_.draw(overlay(e.position, Vec2(7, 7) * px, 0, QuadShape::Circle, accent, 0, {}), kOverlay + 1);
             }
+        }
+        if (const auto& g = w_->ghost) { // where it lands, outlined in the accent
+            const Vec2 s = (g->shape || g->sprite ? entitySize(*g) : Vec2(24, 24) / view.zoom) + Vec2(8, 8) * px;
+            r_.draw(overlay(g->position, s, radians(g->rotation), QuadShape::Rectangle, {0, 0, 0, 0}, 1.5f * px, accent), kOverlay + 2);
+            r_.draw(overlay(g->position, Vec2(7, 7) * px, 0, QuadShape::Circle, accent, 0, {}), kOverlay + 2);
         }
         r_.record(cmd, rp.renderArea.extent);
     }
@@ -366,11 +392,27 @@ bool Viewport::eventFilter(QObject* watched, QEvent* e) {
     case QEvent::DragMove: {
         auto* d = static_cast<QDropEvent*>(e);
         if (!d->mimeData()->hasFormat(kObjectMime)) return false;
+        // The object shows where it would land while it is dragged (a sprite, whose picture is
+        // chosen on the drop, as a plain frame).
+        if (e->type() == QEvent::DragEnter || !window_->ghost) {
+            const std::string kind = d->mimeData()->data(kObjectMime).toStdString();
+            Entity ghost;
+            if (kind == "sprite" || !makeObject(kind, ctx_, this, ghost)) ghost.shape = Shape{ShapeKind::RoundedRectangle, {96, 96}, Color{1, 1, 1, 0.25f}};
+            window_->ghost = ghost;
+        }
+        window_->ghost->position = window_->toWorld(d->position());
+        window_->requestUpdate();
         d->acceptProposedAction();
         return true;
     }
+    case QEvent::DragLeave:
+        window_->ghost.reset();
+        window_->requestUpdate();
+        return false;
     case QEvent::Drop: {
         auto* d = static_cast<QDropEvent*>(e);
+        window_->ghost.reset();
+        window_->requestUpdate();
         if (!d->mimeData()->hasFormat(kObjectMime)) return false;
         const Vec2 at = window_->toWorld(d->position());
         d->acceptProposedAction();

@@ -24,6 +24,8 @@ struct NodeDef;
 struct EmitContext {
     std::function<std::string(const std::string& pin)> input;
     std::function<std::string(const std::string& pin)> exec;
+    // A value stored on the node that is not a pin (the Lua Code node's code), as typed.
+    std::function<std::string(const std::string& name)> value;
     std::string uid;
 };
 
@@ -36,6 +38,8 @@ struct NodeDef {
     // Events start a chain: they become a Lua function ("update") or a condition inside one.
     enum class Kind { Event, Action, Pure } kind = Kind::Action;
     std::string event; // Event nodes: "start" or "update"
+    // A node that carries code of its own (values["code"], edited as text): the Lua Code node.
+    bool hasCode = false;
     // Action / Event: Lua statements. Pure: the expression for `pin`.
     std::function<std::string(const EmitContext&)> statements;
     std::function<std::string(const EmitContext&, const std::string& pin)> expression;

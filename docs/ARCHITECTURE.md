@@ -63,10 +63,19 @@ listen to `sceneChanged`, `scenesChanged` and `selectionChanged`. Behavior (`gra
 `script()`) is the selected object's, or the scene's when the scene is selected.
 
 The workspace docks its panels with Qt Advanced Docking System, as bemotion does: the
-library (`ui/Library`: ready-made objects, or the nodes in the Nodes view) on the left;
-the Scene / Nodes / Script views in the middle over the Console; the Hierarchy and Files
-(`ui/ProjectPanels`) over the Inspector on the right. Each moves anywhere; the layout is
-saved in the settings. Settings and Help are bestyle `PagedWindow`s.
+library (`ui/Library`: ready-made objects, or nodes and presets in the Nodes view) on the
+left; the Scene / Nodes / Scripts views in the middle over the Console; the Hierarchy and
+Files (`ui/ProjectPanels`) over the Inspector on the right. Scenes are the tabs above
+them. Nodes belong to the selected object; the Scripts view is the project's (every file
+in `scripts/`), and the library hides while it shows. Each panel moves anywhere or
+minimizes to a tab on the window's edge (bestyle's `EdgeTab`); the layout is saved in the
+settings. Settings and Help are bestyle `PagedWindow`s.
+
+Keys come from `app/Shortcuts` (each action once, the user's keys in the settings).
+Plugins (`app/Plugins`, docs/PLUGINS.md) are Lua states of their own that add library
+objects and Plugins menu commands. A project saves itself a moment after each change;
+unsaved changes are kept in the app data folder's `recovery/` and offered back after a
+crash.
 
 Export (`app/Exporter`) copies the platform's player and the game's data; `artisan
 --export <platform> <project> <out>` does it without a window.
@@ -75,7 +84,7 @@ Export (`app/Exporter`) copies the platform's player and the game's data; `artis
 
 - **A new component** (say, a collider): its struct and field in `core/Scene.h`, its JSON
   in `core/Project.cpp`, how it draws in `runtime/SceneDraw.cpp` (if it does), its section
-  in `editor/ui/ObjectsPanel.cpp`, its Lua fields in `script/LuaRuntime.cpp`, a test.
+  in `editor/ui/ObjectsPanel.cpp`, its Lua fields in `script/LuaRuntime.cpp`, a test. (The hitbox went this way: `Hitbox` and `resolveHitboxes` in `core/Scene`, `hit()` called from `LuaRuntime::collide`.)
 - **A new node**: one entry in `nodes/NodeLibrary.cpp`; the test compiles and runs every
   node, so it is covered at once; add it to `docs/SCRIPTING.md`.
 - **A new script function**: `LuaApi` in `script/LuaRuntime.cpp`, `docs/SCRIPTING.md`, a test.

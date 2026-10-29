@@ -2,6 +2,7 @@
 
 #include <QColorDialog>
 #include <QHBoxLayout>
+#include <QLinearGradient>
 #include <QMouseEvent>
 #include <QPainterPath>
 #include <QPainterPathStroker>
@@ -9,6 +10,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <map>
 
 namespace artisan::editor::ui {
 
@@ -19,8 +21,9 @@ Color fromQColor(const QColor& c) {
 
 void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color) {
     // Unit coordinates (radius 1, y down): a thick triangle (the outer one less the inner one,
-    // scaled about the center of its inscribed circle), and a slit that parts the right leg from
-    // the base at the bottom right, so the triangle reads as an "A".
+    // scaled about the center of its inscribed circle) whose base stops short of the right leg:
+    // an upright gap at the bottom right, the leg running on down to the base's line, so the
+    // triangle reads as an "A". Lit from the top: the color goes lighter toward the peak.
     const QPointF top(0.0, -0.92), left(-0.98, 0.78), right(0.98, 0.78);
     const QPointF in(0.0, 0.214); // the inscribed circle's center (radius 0.566)
     const double k = 0.47;         // the inner triangle's scale: legs 0.3 thick
@@ -29,29 +32,55 @@ void drawLogoMark(QPainter& p, Pt center, float radius, Rgba color) {
     outer.addPolygon(QPolygonF({top, left, right, top}));
     QPainterPath hole;
     hole.addPolygon(QPolygonF({inner(top), inner(left), inner(right), inner(top)}));
-    // The slit: from the hole's bottom right corner down along the right leg's inner edge.
-    const QPointF from = inner(right), along = from - inner(top);
-    const QPointF to = from + along / along.y() * (right.y() - from.y() + 0.05);
-    QPainterPath cut;
-    cut.moveTo(from - along * 0.02);
-    cut.lineTo(to);
-    QPainterPathStroker stroker;
-    stroker.setWidth(0.07);
-    stroker.setCapStyle(Qt::FlatCap);
-    const QPainterPath mark = outer.subtracted(hole).subtracted(stroker.createStroke(cut));
+    // The gap: a band through the base along the right leg's inner edge (slanted as the leg is),
+    // from the hole down past the bottom; the leg itself stays whole.
+    const QPointF corner = inner(right) + QPointF(0, -0.01), along = inner(right) - inner(top);
+    const double below = right.y() + 0.05;
+    const QPointF legFoot = corner + along / along.y() * (below - corner.y());
+    const QPointF width(0.17, 0.0);
+    QPainterPath gap;
+    gap.addPolygon(QPolygonF({corner - width, corner, legFoot, legFoot - width, corner - width}));
+    const QPainterPath mark = outer.subtracted(hole).subtracted(gap);
     p.save();
     p.setRenderHint(QPainter::Antialiasing);
     p.translate(center.x, center.y);
     p.scale(radius, radius);
     p.setPen(Qt::NoPen);
-    p.setBrush(bestyle::qcolor(color));
+    QLinearGradient light(top, QPointF(0.0, 0.78));
+    light.setColorAt(0.0, bestyle::qcolor(theme::mix(color, rgba(255, 255, 255), 0.4f)));
+    light.setColorAt(1.0, bestyle::qcolor(theme::mix(color, rgba(0, 40, 60), 0.15f)));
+    p.setBrush(light);
     p.drawPath(mark);
     p.restore();
 }
 
+void drawAppIcon(QPainter& p, float size) {
+    // The mark on a flat dark rounded square, as bemotion's icon (#141417), for the taskbar and
+    // the window.
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(20, 20, 23));
+    const float m = size * 0.03f;
+    p.drawRoundedRect(QRectF(m, m, size - 2 * m, size - 2 * m), size * 0.22, size * 0.22);
+    p.restore();
+    drawLogoMark(p, {size * 0.5f, size * 0.53f}, size * 0.34f, kLogoCyan);
+}
+
 void LogoMark::paintEvent(QPaintEvent*) {
     QPainter p(this);
-    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.48f, kLogoGold);
+    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.48f, kLogoCyan);
+}
+
+Icon pluginIcon(const std::string& name) {
+    static const std::map<std::string, Icon> icons = {
+        {"star", Icon::Star},         {"circle", Icon::Ellipse},  {"rectangle", Icon::Rectangle}, {"person", Icon::Person},
+        {"bulb", Icon::Bulb},         {"cube", Icon::Cube},       {"image", Icon::Image},         {"zigzag", Icon::Zigzag},
+        {"ripple", Icon::Ripple},     {"marker", Icon::Marker},   {"magnet", Icon::Magnet},       {"align_left", Icon::AlignLeft},
+        {"fit", Icon::FitView},       {"plugin", Icon::Plugin},   {"code", Icon::Code},           {"wave", Icon::Wave},
+        {"bounce", Icon::Bounce},     {"layers", Icon::Layers},   {"polygon", Icon::Polygon},     {"diamond", Icon::Diamond}};
+    auto it = icons.find(name);
+    return it != icons.end() ? it->second : Icon::Plugin;
 }
 
 LogoButton::LogoButton(int size, QWidget* parent) : QAbstractButton(parent), size_(size) {
@@ -63,7 +92,7 @@ void LogoButton::paintEvent(QPaintEvent*) {
     QPainter p(this);
     Draw d(p);
     if (underMouse()) d.rectFilled({0, 0}, {static_cast<float>(width()), static_cast<float>(height())}, theme::kBgHover, theme::current().rounding);
-    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.36f, kLogoGold);
+    drawLogoMark(p, {width() * 0.5f, height() * 0.5f}, width() * 0.36f, kLogoCyan);
 }
 
 QLabel* label(const QString& text, Tone tone, float scale, bool bold) {

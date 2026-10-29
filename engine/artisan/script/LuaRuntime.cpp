@@ -72,6 +72,7 @@ struct LuaApi {
         if (!std::strcmp(key, "set_color")) return lua_pushcfunction(L, setColor), 1;
         if (!std::strcmp(key, "find")) return lua_pushcfunction(L, find), 1;
         if (!std::strcmp(key, "destroy")) return lua_pushcfunction(L, destroy), 1;
+        if (!std::strcmp(key, "touching")) return lua_pushcfunction(L, touchingAny), 1;
         if (!std::strcmp(key, "x")) return lua_pushnumber(L, e->position.x), 1;
         if (!std::strcmp(key, "y")) return lua_pushnumber(L, e->position.y), 1;
         if (!std::strcmp(key, "rotation")) return lua_pushnumber(L, e->rotation), 1;
@@ -118,6 +119,21 @@ struct LuaApi {
         if (!e) return lua_pushnil(L), 1;
         pushObject(L, e->id);
         return 1;
+    }
+
+    // self:touching() — any hitbox; self:touching("Coin") — the one named so (or an object).
+    static int touchingAny(lua_State* L) {
+        Entity* e = entity(L, 1);
+        LuaRuntime* rt = runtimeOf(L);
+        if (!e || !rt->scene_) return lua_pushboolean(L, false), 1;
+        if (lua_isuserdata(L, 2)) {
+            const Entity* other = entity(L, 2);
+            return lua_pushboolean(L, other && touching(*e, *other)), 1;
+        }
+        const char* name = luaL_optstring(L, 2, "");
+        for (const Entity& other : rt->scene_->entities)
+            if ((!*name || other.name == name) && touching(*e, other)) return lua_pushboolean(L, true), 1;
+        return lua_pushboolean(L, false), 1;
     }
 
     static int destroy(lua_State* L) {
@@ -254,7 +270,7 @@ bool LuaRuntime::attach(EntityId id, const std::string& code, const std::string&
     return true;
 }
 
-void LuaRuntime::call(int b, const char* function, float dt, bool withDt) {
+void LuaRuntime::call(int b, const char* function, float dt, bool withDt, EntityId other) {
     Behavior& beh = behaviors_[static_cast<size_t>(b)];
     if (beh.failed) return;
     const int top = lua_gettop(L_);
@@ -268,6 +284,10 @@ void LuaRuntime::call(int b, const char* function, float dt, bool withDt) {
     int args = 1;
     if (withDt) {
         lua_pushnumber(L_, dt);
+        ++args;
+    }
+    if (other) {
+        pushObject(L_, other);
         ++args;
     }
     if (lua_pcall(L_, args, 0, top + 1) != LUA_OK) {
@@ -317,6 +337,33 @@ void LuaRuntime::update(float dt, float now) {
     for (size_t i = 0; i < behaviors_.size(); ++i) call(static_cast<int>(i), "update", dt, true);
     syncCameraOut();
     if (!destroyed_.empty() && scene_) {
+        for (EntityId id : destroyed_) {
+            scene_->remove(id);
+            std::erase_if(behaviors_, [&](const Behavior& b) {
+                if (b.entity != id) return false;
+                luaL_unref(L_, LUA_REGISTRYINDEX, b.env);
+                return true;
+            });
+        }
+        destroyed_.clear();
+    }
+    collide();
+}
+
+void LuaRuntime::collide() {
+    if (!scene_) return;
+    // Hitboxes pushed out of solid ones; each pair that starts touching calls hit() on both.
+    const std::vector<std::pair<EntityId, EntityId>> now = resolveHitboxes(*scene_);
+    for (const auto& [a, b] : now) {
+        if (std::find(contacts_.begin(), contacts_.end(), std::pair{a, b}) != contacts_.end()) continue;
+        for (size_t i = 0; i < behaviors_.size(); ++i) {
+            const EntityId self = behaviors_[i].entity;
+            if (self == a) call(static_cast<int>(i), "hit", 0.0f, false, b);
+            else if (self == b) call(static_cast<int>(i), "hit", 0.0f, false, a);
+        }
+    }
+    contacts_ = now;
+    if (!destroyed_.empty()) { // destroyed in hit()
         for (EntityId id : destroyed_) {
             scene_->remove(id);
             std::erase_if(behaviors_, [&](const Behavior& b) {

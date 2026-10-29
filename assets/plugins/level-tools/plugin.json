@@ -1,0 +1,9 @@
+{
+  "id": "level-tools",
+  "name": "Level Tools",
+  "version": "1.0.0",
+  "author": "Artisan",
+  "description": "Commands for building levels: scatter coins around the camera, line objects up, snap everything to the grid.",
+  "icon": "magnet",
+  "permissions": ["edit"]
+}

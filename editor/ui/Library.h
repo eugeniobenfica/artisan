@@ -7,6 +7,8 @@
 
 #include "artisan/core/Scene.h"
 
+#include "bestyle/Icons.h"
+
 #include <QScrollArea>
 
 #include <functional>
@@ -23,6 +25,7 @@ class EditorContext;
 // Drag data: an object kind ("player", "circle"...), a node type ("action.move").
 inline constexpr const char* kObjectMime = "application/x-artisan-object";
 inline constexpr const char* kNodeMime = "application/x-artisan-node";
+inline constexpr const char* kPresetMime = "application/x-artisan-preset"; // a node preset ("wasd")
 
 struct ObjectKind {
     std::string kind;     // "player"
@@ -31,6 +34,7 @@ struct ObjectKind {
     const char* tip;
 };
 const std::vector<ObjectKind>& objectKinds();
+bestyle::Icon objectKindIcon(const std::string& kind);
 
 // Makes a ready-made object of `kind` (a sprite asks for its picture: false if none was chosen).
 // `parent` hosts the file dialog.
@@ -41,12 +45,13 @@ EntityId addObject(const std::string& kind, EditorContext& ctx, QWidget* parent,
 class LibraryPanel : public QScrollArea {
     Q_OBJECT
 public:
-    enum class Mode { Objects, Nodes };
+    enum class Mode { Objects, Nodes, Scripts }; // Scripts: the Scripts view shows, nothing to add
     explicit LibraryPanel(EditorContext& ctx, QWidget* parent = nullptr);
     void setMode(Mode mode);
     Mode mode() const { return mode_; }
 
     std::function<void(const std::string& type)> onAddNode; // a node tile was clicked
+    std::function<void(const std::string& id)> onAddPreset; // a preset tile was clicked
 
 signals:
     void titleChanged(const QString& title);

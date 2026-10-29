@@ -2,6 +2,7 @@
 
 #include "app/Platform.h"
 #include "app/Settings.h"
+#include "ui/SettingsWindow.h"
 #include "ui/Widgets.h"
 
 #include <QComboBox>
@@ -226,13 +227,18 @@ void HomeScreen::buildUi() {
     auto* footer = new QHBoxLayout;
     footer->setSpacing(6);
     footer->addStretch(1);
+    auto* coffee = new IconButton(Icon::Coffee, tr("Support Artisan: buy me a coffee"), 30);
+    connect(coffee, &QAbstractButton::clicked, this, [] { platform::openWithDefaultApp(kSupportUrl); });
+    footer->addWidget(coffee);
     auto* gear = new IconButton(Icon::Gear, tr("Settings (Ctrl+,)"), 30);
     connect(gear, &QAbstractButton::clicked, this, [this] {
         if (onSettings) onSettings();
     });
     footer->addWidget(gear);
-    auto* help = new IconButton(Icon::Help, tr("Documentation"), 30);
-    connect(help, &QAbstractButton::clicked, this, [] { platform::openWithDefaultApp("https://github.com/eugeniobenfica/artisan#readme"); });
+    auto* help = new IconButton(Icon::Help, tr("Help (F1)"), 30);
+    connect(help, &QAbstractButton::clicked, this, [this] {
+        if (onHelp) onHelp();
+    });
     footer->addWidget(help);
     side->addLayout(footer);
     row->addWidget(sidebar);

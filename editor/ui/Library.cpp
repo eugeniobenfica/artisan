@@ -1,6 +1,7 @@
 #include "ui/Library.h"
 
 #include "app/Platform.h"
+#include "app/Plugins.h"
 #include "app/Settings.h"
 #include "artisan/nodes/NodeLibrary.h"
 #include "ui/EditorContext.h"
@@ -36,6 +37,7 @@ struct Section {
 };
 
 Icon iconOfKind(const std::string& kind) {
+    if (const PluginObject* o = PluginHost::get().findObject(kind)) return pluginIcon(o->icon);
     if (kind == "player") return Icon::Person;
     if (kind == "collectible") return Icon::Star;
     if (kind == "circle" || kind == "capsule") return Icon::Ellipse;
@@ -50,30 +52,31 @@ Icon iconOfCategory(const std::string& category) {
     if (category == "Shapes") return Icon::Polygon;
     if (category == "Media") return Icon::Image;
     if (category == "Lights") return Icon::Bulb;
-    return Icon::Cube;
+    if (category == "Other") return Icon::Cube;
+    return Icon::Plugin; // a plugin's category
 }
 
 // The player: a lit capsule carrying its own light, moved by the arrow keys (a node graph:
 // axis × speed × dt), the camera following it.
 NodeGraph playerGraph() {
     NodeGraph g;
-    Node& update = g.add("event.update", 0, 120);
-    Node& move = g.add("action.move", 820, 120);
-    Node& follow = g.add("action.camera_follow", 1080, 120);
-    g.connect({update.id, "then", move.id, "in"});
-    g.connect({move.id, "then", follow.id, "in"});
+    const NodeId update = g.add("event.update", 0, 0).id;
+    const NodeId move = g.add("action.move", 840, 0).id;
+    const NodeId follow = g.add("action.camera_follow", 1120, 0).id;
+    g.connect({update, "then", move, "in"});
+    g.connect({move, "then", follow, "in"});
     for (int axis = 0; axis < 2; ++axis) {
-        const float y = 300.0f + axis * 160.0f;
-        Node& input = g.add("input.axis", 0, y);
-        input.values["negative"] = axis ? "up" : "left";
-        input.values["positive"] = axis ? "down" : "right";
-        Node& speed = g.add("math.multiply", 270, y);
-        speed.values["b"] = "320";
-        Node& step = g.add("math.multiply", 540, y);
-        g.connect({input.id, "value", speed.id, "a"});
-        g.connect({speed.id, "result", step.id, "a"});
-        g.connect({update.id, "dt", step.id, "b"});
-        g.connect({step.id, "result", move.id, axis ? "dy" : "dx"});
+        const float y = 150.0f + axis * 160.0f;
+        const NodeId input = g.add("input.axis", 0, y).id;
+        g.find(input)->values["negative"] = axis ? "up" : "left";
+        g.find(input)->values["positive"] = axis ? "down" : "right";
+        const NodeId speed = g.add("math.multiply", 280, y).id;
+        g.find(speed)->values["b"] = "320";
+        const NodeId step = g.add("math.multiply", 560, y).id;
+        g.connect({input, "value", speed, "a"});
+        g.connect({speed, "result", step, "a"});
+        g.connect({update, "dt", step, "b"});
+        g.connect({step, "result", move, axis ? "dy" : "dx"});
     }
     return g;
 }
@@ -81,13 +84,13 @@ NodeGraph playerGraph() {
 // A collectible turns on itself: Rotate By (dt × 120).
 NodeGraph spinGraph() {
     NodeGraph g;
-    Node& update = g.add("event.update", 0, 60);
-    Node& rotate = g.add("action.rotate", 300, 60);
-    Node& speed = g.add("math.multiply", 40, 220);
-    speed.values["b"] = "120";
-    g.connect({update.id, "then", rotate.id, "in"});
-    g.connect({update.id, "dt", speed.id, "a"});
-    g.connect({speed.id, "result", rotate.id, "degrees"});
+    const NodeId update = g.add("event.update", 0, 60).id;
+    const NodeId rotate = g.add("action.rotate", 300, 60).id;
+    const NodeId speed = g.add("math.multiply", 40, 220).id;
+    g.find(speed)->values["b"] = "120";
+    g.connect({update, "then", rotate, "in"});
+    g.connect({update, "dt", speed, "a"});
+    g.connect({speed, "result", rotate, "degrees"});
     return g;
 }
 
@@ -95,9 +98,9 @@ NodeGraph spinGraph() {
 
 const std::vector<ObjectKind>& objectKinds() {
     static const std::vector<ObjectKind> kinds = {
-        {"player", QT_TR_NOOP("Player"), "Characters", QT_TR_NOOP("A lit character that moves with the arrow keys, the camera following it (a node graph)")},
+        {"player", QT_TR_NOOP("Player"), "Characters", QT_TR_NOOP("A lit character that moves with the arrow keys, the camera following it (a node graph), with a hitbox")},
         {"collectible", QT_TR_NOOP("Collectible"), "Characters", QT_TR_NOOP("A glowing gem that turns on itself (a node graph)")},
-        {"platform", QT_TR_NOOP("Platform"), "Characters", QT_TR_NOOP("A long block to stand on")},
+        {"platform", QT_TR_NOOP("Platform"), "Characters", QT_TR_NOOP("A long block to stand on: its hitbox is solid")},
         {"rectangle", QT_TR_NOOP("Rectangle"), "Shapes", QT_TR_NOOP("A rectangle: sharp at any zoom, with outline and glow")},
         {"rounded", QT_TR_NOOP("Rounded"), "Shapes", QT_TR_NOOP("A rectangle with rounded corners")},
         {"circle", QT_TR_NOOP("Circle"), "Shapes", QT_TR_NOOP("A circle")},
@@ -109,7 +112,15 @@ const std::vector<ObjectKind>& objectKinds() {
     return kinds;
 }
 
+Icon objectKindIcon(const std::string& kind) { return iconOfKind(kind); }
+
 bool makeObject(const std::string& kind, EditorContext& ctx, QWidget* parent, Entity& e) {
+    if (const PluginObject* o = PluginHost::get().findObject(kind)) {
+        std::string error;
+        if (PluginHost::get().makeObject(*o, e, &error)) return true;
+        ctx.log(QObject::tr("error: %1 (%2)").arg(QString::fromStdString(error), QString::fromStdString(o->name)));
+        return false;
+    }
     if (kind == "sprite") {
         const QString file = QFileDialog::getOpenFileName(parent, QObject::tr("Choose an Image"), platform::toQt(ctx.dir / "assets"),
                                                           QObject::tr("Images (*.png *.jpg *.jpeg *.bmp *.tga)"));
@@ -133,15 +144,18 @@ bool makeObject(const std::string& kind, EditorContext& ctx, QWidget* parent, En
         e.layer = 1;
         e.shape = Shape{ShapeKind::Capsule, {56, 56}, Color::rgb(0xE8B931), 0.0f, 0.0f, {}, 14.0f, false};
         e.light = Light{Color::rgb(0xFFD58A), 380.0f, 1.3f};
+        e.hitbox = Hitbox{{56, 56}, {}, false};
         e.graph = playerGraph();
     } else if (kind == "collectible") {
         e.name = "Collectible";
         e.rotation = 45.0f;
         e.shape = Shape{ShapeKind::RoundedRectangle, {34, 34}, Color::rgb(0x5FE0D0), 6.0f, 0.0f, {}, 18.0f, false};
         e.graph = spinGraph();
+        e.hitbox = Hitbox{{34, 34}, {}, false};
     } else if (kind == "platform") {
         e.name = "Platform";
         e.shape = Shape{ShapeKind::RoundedRectangle, {360, 36}, Color::rgb(0x4A4F63), 6.0f, 0.0f, {}, 0.0f, true};
+        e.hitbox = Hitbox{{360, 36}, {}, true}; // something to stand on
     } else if (kind == "light") {
         e.light = Light{};
         e.name = "Light";
@@ -177,6 +191,7 @@ LibraryPanel::LibraryPanel(EditorContext& ctx, QWidget* parent) : QScrollArea(pa
     setFrameShape(QFrame::NoFrame);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     rebuild();
+    connect(&PluginHost::get(), &PluginHost::changed, this, [this] { rebuild(); });
 }
 
 void LibraryPanel::setMode(Mode mode) {
@@ -192,6 +207,19 @@ void LibraryPanel::rebuild() {
     auto* col = new QVBoxLayout(content);
     col->setContentsMargins(8, 8, 8, 8);
     col->setSpacing(6);
+
+    if (mode_ == Mode::Scripts) { // nothing to add to a script: the panel rests, saying why
+        col->addStretch(1);
+        QLabel* note = label(tr("Scripts belong to the whole project: pick one from the list beside the editor.\n\nObjects and nodes "
+                                "come back here in the Scene and Nodes views."),
+                             Tone::TextFaint);
+        note->setWordWrap(true);
+        note->setAlignment(Qt::AlignCenter);
+        col->addWidget(note);
+        col->addStretch(2);
+        setWidget(content);
+        return;
+    }
 
     auto* search = new QLineEdit(filter_);
     search->setPlaceholderText(mode_ == Mode::Nodes ? tr("Search nodes") : tr("Search objects"));
@@ -254,7 +282,41 @@ void LibraryPanel::rebuild() {
             connect(t, &QAbstractButton::clicked, this, [this, kind] { addObject(kind, ctx_, this); });
             section(k.category, iconOfCategory(k.category)).add(t);
         }
+        // What plugins add, in their own categories.
+        for (const PluginObject* o : PluginHost::get().objects()) {
+            if (!matches(QString::fromStdString(o->name))) continue;
+            auto* t = new Tile(pluginIcon(o->icon), QString::fromStdString(o->name));
+            t->setTileSize({kTileWidth, 62});
+            const Plugin* p = PluginHost::get().find(o->pluginId);
+            t->setToolTip((o->tip.empty() ? QString() : QString::fromStdString(o->tip) + "\n") +
+                          tr("From the %1 plugin. Click to add it, or drag it into the scene").arg(QString::fromStdString(p ? p->name : o->pluginId)));
+            const std::string kind = PluginHost::objectKey(*o);
+            t->setDragData([kind] {
+                auto* m = new QMimeData;
+                m->setData(kObjectMime, QByteArray::fromStdString(kind));
+                return m;
+            });
+            connect(t, &QAbstractButton::clicked, this, [this, kind] { addObject(kind, ctx_, this); });
+            section(o->category, Icon::Plugin).add(t);
+        }
     } else {
+        // Presets first: pieces of graph already wired.
+        for (const NodePreset& preset : nodePresets()) {
+            if (!matches(tr(preset.name))) continue;
+            auto* t = new Tile(preset.icon, tr(preset.name));
+            t->setTileSize({kTileWidth, 62});
+            t->setToolTip(tr(preset.tip) + "\n" + tr("Click to add it in the middle of the graph, or drag it where it goes"));
+            const std::string id = preset.id;
+            t->setDragData([id] {
+                auto* m = new QMimeData;
+                m->setData(kPresetMime, QByteArray::fromStdString(id));
+                return m;
+            });
+            connect(t, &QAbstractButton::clicked, this, [this, id] {
+                if (onAddPreset) onAddPreset(id);
+            });
+            section("Presets", Icon::Layers).add(t);
+        }
         for (const std::string& cat : nodeCategories())
             for (const NodeDef& d : nodeLibrary()) {
                 if (d.category != cat || !matches(QString::fromStdString(d.title))) continue;

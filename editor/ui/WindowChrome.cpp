@@ -11,6 +11,13 @@
 #include <QPainter>
 #include <QWindow>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace artisan::editor::ui {
 
 namespace {
@@ -164,6 +171,28 @@ private:
 void installWindowChrome() {
     static Chrome chrome;
     qApp->installEventFilter(&chrome);
+}
+
+void tintTitleBar(QWidget* window) {
+#ifdef _WIN32
+    using SetAttribute = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+    static const auto set = [] {
+        const HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+        return dwm ? reinterpret_cast<SetAttribute>(reinterpret_cast<void*>(GetProcAddress(dwm, "DwmSetWindowAttribute"))) : nullptr;
+    }();
+    if (!set) return;
+    const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    const Rgba header = theme::kHeader;
+    const BOOL dark = red(header) + green(header) + blue(header) < 3 * 128; // the buttons' glyphs
+    // COLORREF is 0x00BBGGRR, as Rgba without its alpha.
+    const COLORREF caption = header & 0xFFFFFF, text = theme::kTextDim & 0xFFFFFF, border = theme::kBorder & 0xFFFFFF;
+    set(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof dark);
+    set(hwnd, 34 /* DWMWA_BORDER_COLOR */, &border, sizeof border);
+    set(hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption, sizeof caption);
+    set(hwnd, 36 /* DWMWA_TEXT_COLOR */, &text, sizeof text);
+#else
+    (void)window;
+#endif
 }
 
 } // namespace artisan::editor::ui

@@ -265,10 +265,39 @@ void InspectorPanel::buildEntityInspector(QVBoxLayout* col, Entity& entity) {
         col->addWidget(new LabeledRow(tr("Intensity"), number("intensity", [](Entity& e) { return e.light ? &e.light->intensity : nullptr; }, "%.2f", 0.01f, 0, 50), 120));
     }
 
+    // --- hitbox ----------------------------------------------------------------------------
+    if (entity.hitbox) {
+        section(col, tr("Hitbox"), [this, ent, rebuildLater] {
+            ctx_.checkpoint();
+            if (Entity* e = ent()) e->hitbox.reset();
+            ctx_.changed();
+            rebuildLater();
+        });
+        col->addWidget(new LabeledRow(tr("Size"), hbox({number("hw", [](Entity& e) { return e.hitbox ? &e.hitbox->size.x : nullptr; }, "%.0f", 1, 0, 100000),
+                                                         number("hh", [](Entity& e) { return e.hitbox ? &e.hitbox->size.y : nullptr; }, "%.0f", 1, 0, 100000)}), 120));
+        col->addWidget(new LabeledRow(tr("Offset"), hbox({number("hx", [](Entity& e) { return e.hitbox ? &e.hitbox->offset.x : nullptr; }, "%.0f", 1, 0, 0),
+                                                           number("hy", [](Entity& e) { return e.hitbox ? &e.hitbox->offset.y : nullptr; }, "%.0f", 1, 0, 0)}), 120));
+        auto* solid = toggle([](Entity& e) { return e.hitbox ? &e.hitbox->solid : nullptr; });
+        solid->setToolTip(tr("Solid: other hitboxes cannot go through it (walls, floors)"));
+        col->addWidget(new LabeledRow(tr("Solid"), solid, 120));
+        auto* fit = new QPushButton(tr("Fit to the Shape"));
+        fit->setToolTip(tr("The hitbox takes the size of what the object draws"));
+        connect(fit, &QPushButton::clicked, this, [this, ent] {
+            Entity* e = ent();
+            if (!e || !e->hitbox || (!e->shape && !e->sprite)) return;
+            ctx_.checkpoint();
+            e->hitbox->size = e->shape ? e->shape->size : e->sprite->size;
+            e->hitbox->offset = {};
+            ctx_.changed();
+        });
+        fit->setEnabled(entity.shape || entity.sprite);
+        col->addWidget(new LabeledRow({}, fit, 120));
+    }
+
     buildBehavior(col);
 
     // --- more components -------------------------------------------------------------------------
-    if (!entity.shape || !entity.sprite || !entity.light) {
+    if (!entity.shape || !entity.sprite || !entity.light || !entity.hitbox) {
         auto* more = new QPushButton(makeIcon(Icon::Plus, theme::kTextDim, 20), tr("Add Component"));
         connect(more, &QPushButton::clicked, this, [this, ent, more, rebuildLater] {
             Entity* e = ent();
@@ -286,6 +315,12 @@ void InspectorPanel::buildEntityInspector(QVBoxLayout* col, Entity& entity) {
             add(tr("Shape"), e->shape.has_value(), [](Entity& x) { x.shape = Shape{}; });
             add(tr("Sprite"), e->sprite.has_value(), [](Entity& x) { x.sprite = Sprite{}; });
             add(tr("Light"), e->light.has_value(), [](Entity& x) { x.light = Light{}; });
+            add(tr("Hitbox"), e->hitbox.has_value(), [](Entity& x) {
+                // As big as what it draws.
+                x.hitbox = Hitbox{};
+                if (x.shape) x.hitbox->size = x.shape->size;
+                else if (x.sprite) x.hitbox->size = x.sprite->size;
+            });
             menu.exec(more->mapToGlobal(QPoint(0, more->height())));
         });
         col->addSpacing(metrics::kGroupGap);

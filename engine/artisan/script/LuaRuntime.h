@@ -7,6 +7,7 @@
 // The API scripts see (docs/SCRIPTING.md):
 //   self.x, self.y, self.rotation, self.scale_x, self.scale_y, self.visible, self.layer, self.name
 //   self:set_color(r, g, b, a)   self:find(name) -> another object or nil   self:destroy()
+//   self:touching([name or object]) -> its hitbox touches one   hit(self, other) when one starts to
 //   input.down(key) input.pressed(key) input.released(key) input.mouse_x/mouse_y (world)
 //   time.dt time.now   camera.x camera.y camera.zoom   log(...)   vars (the object's variables)
 
@@ -42,7 +43,8 @@ public:
     size_t behaviors() const { return behaviors_.size(); }
 
 private:
-    void call(int behavior, const char* function, float dt, bool withDt);
+    void call(int behavior, const char* function, float dt, bool withDt, EntityId other = 0);
+    void collide(); // after update: hitboxes, and hit(self, other) for the new contacts
     void syncGlobalsIn(float dt, float now);
     void syncCameraOut();
     void error(const std::string& message);
@@ -58,6 +60,7 @@ private:
     };
     std::vector<Behavior> behaviors_;
     std::vector<EntityId> destroyed_;
+    std::vector<std::pair<EntityId, EntityId>> contacts_; // hitboxes touching after the last frame
     friend struct LuaApi;
 };
 

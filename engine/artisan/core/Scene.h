@@ -45,6 +45,16 @@ struct Light {
     float intensity = 1.2f;
 };
 
+// A box for collisions, around the object's position (plus `offset`), scaled with it; its
+// rotation is ignored (boxes stay upright, as in most 2D games). A solid hitbox stops the others:
+// they are pushed out of it after each frame's scripts. Every pair of hitboxes that starts to
+// touch calls hit(self, other) on both objects.
+struct Hitbox {
+    Vec2 size{64, 64};
+    Vec2 offset{0, 0};
+    bool solid = false; // walls, floors: they stop the others and never move from a collision
+};
+
 struct Entity {
     EntityId id = 0;
     std::string name;
@@ -57,7 +67,8 @@ struct Entity {
     std::optional<Shape> shape;
     std::optional<Sprite> sprite;
     std::optional<Light> light;
-    std::string script;           // a Lua file in the project ("scripts/player.lua"), or empty
+    std::optional<Hitbox> hitbox;
+    std::string script;          // a Lua file in the project ("scripts/player.lua"), or empty
     std::optional<NodeGraph> graph; // visual behavior, compiled to Lua when the game starts
 };
 
@@ -86,5 +97,15 @@ struct Scene {
     bool remove(EntityId id);
     std::string uniqueName(const std::string& base) const;
 };
+
+// Collisions between hitboxes.
+struct Box {
+    Vec2 min, max;
+};
+std::optional<Box> hitboxOf(const Entity& e); // in the scene, none without a hitbox
+bool touching(const Entity& a, const Entity& b); // overlapping, or side by side (within half a pixel)
+// Pushes every hitbox that is not solid out of the solid ones (the shortest way), then returns
+// the pairs of objects whose hitboxes touch (lower id first).
+std::vector<std::pair<EntityId, EntityId>> resolveHitboxes(Scene& scene);
 
 } // namespace artisan
