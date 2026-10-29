@@ -96,6 +96,44 @@ void IconButton::paintEvent(QPaintEvent*) {
     drawIcon(d, icon_, Pt(width() * 0.5f, height() * 0.5f), std::min(width(), height()) * 0.58f, col);
 }
 
+// --- EdgeTab ---------------------------------------------------------------------------
+
+EdgeTab::EdgeTab(int edge, const QString& names, QWidget* parent) : QAbstractButton(parent), edge_(edge) {
+    setText(names);
+    setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::NoFocus);
+    const int along = std::clamp(fontMetrics().horizontalAdvance(names) + 40, 64, 320);
+    setFixedSize(edge_ < 2 ? QSize(24, along) : QSize(along, 24));
+}
+
+void EdgeTab::paintEvent(QPaintEvent*) {
+    QPainter p(this);
+    Draw d(p);
+    const bool hot = underMouse();
+    const Pt a(0.5f, 0.5f), b(width() - 0.5f, height() - 0.5f);
+    d.rectFilled(a, b, hot ? theme::accent(40) : theme::kBgRaised, 6.0f);
+    d.rect(a, b, hot ? theme::kAccent : theme::kBorder, 6.0f);
+    const int to = edge_ ^ 1; // toward the inside: where the panel comes back
+    const Icon icon = to == 1 ? Icon::ChevronRight : to == 0 ? Icon::ChevronLeft : to == 3 ? Icon::ChevronDown : Icon::ChevronUp;
+    // Laid out as if horizontal, then turned for the side edges (reading upward on the left,
+    // downward on the right).
+    const float len = static_cast<float>(edge_ < 2 ? height() : width()), across = static_cast<float>(edge_ < 2 ? width() : height());
+    p.save();
+    if (edge_ == 0) {
+        p.translate(0, height());
+        p.rotate(-90);
+    } else if (edge_ == 1) {
+        p.translate(width(), 0);
+        p.rotate(90);
+    }
+    Draw r(p);
+    r.text({12.0f, (across - r.textHeight()) * 0.5f}, hot ? theme::kText : theme::kTextDim,
+           p.fontMetrics().elidedText(text(), Qt::ElideRight, static_cast<int>(len - 40)));
+    p.restore();
+    const Pt chevron = edge_ == 0 ? Pt(across * 0.5f, 14.0f) : edge_ == 1 ? Pt(across * 0.5f, len - 14.0f) : Pt(len - 14.0f, across * 0.5f);
+    drawIcon(d, icon, chevron, 11.0f, hot ? theme::kAccent : theme::kTextDim);
+}
+
 // --- Tile ------------------------------------------------------------------------------
 
 Tile::Tile(Icon icon, const QString& label, QWidget* parent) : QAbstractButton(parent), icon_(icon), label_(translate(label)) {

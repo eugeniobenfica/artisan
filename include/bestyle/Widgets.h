@@ -98,6 +98,23 @@ private:
     bool marked_ = false, highlighted_ = false, dimmed_ = false;
 };
 
+// The tab a minimized panel leaves on a window edge (0 left, 1 right, 2 top, 3 bottom): its names
+// (upright on the side edges, like a book's spine) and a chevron pointing where it comes back
+// from. Clicked, the app brings the panel back.
+class EdgeTab : public QAbstractButton {
+public:
+    EdgeTab(int edge, const QString& names, QWidget* parent = nullptr);
+    int edge() const { return edge_; }
+
+protected:
+    void paintEvent(QPaintEvent*) override;
+    void enterEvent(QEnterEvent*) override { update(); }
+    void leaveEvent(QEvent*) override { update(); }
+
+private:
+    int edge_;
+};
+
 // A number edited like After Effects' values: drag horizontally to scrub
 // (Shift = x10, Alt = /10), click to type. editStarted / editFinished bracket
 // one undoable change.
